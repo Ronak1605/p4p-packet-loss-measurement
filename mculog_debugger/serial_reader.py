@@ -20,7 +20,7 @@ def read_serial_log(port="/dev/cu.usbserial-TI4MYIGN1", baudrate=115200):
     print(f"Connecting to {port} at {baudrate} baud...")
 
     try:
-        with serial.Serial(port, baudrate, timeout=1) as ser:
+        with serial.Serial(port, baudrate, timeout=2) as ser:
             print("Serial connection established successfully.")
             # Future log processing would go here
             while True:
