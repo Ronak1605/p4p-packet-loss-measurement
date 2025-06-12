@@ -4,8 +4,12 @@ This repository holds the files for packet loss experiments for P4P #140.
 ## Running Files
 Currently the only executable file is `mculog_debugger.serial_reader` which validates the output logs from the C2000 launchpad XL Microcontroller. Below are the steps to run it:
 
-1. Naviagte to the root of the repository
-2. Run ```pip install -r requirements.txt``` to install dependencies
-3. Run ```python -m mculog_debugger.serial_reader``` or ```python3 -m mculog_debugger.serial_reader``` to start the reader
+1. Ensure that the C2000 launchpad XL Microcontroller is connected to your PC/Laptop, you can verify the connection on Mac by:
+   1. Naviagting to your root user directory
+   2. Running the command ```ls /dev/cu.*``` in a terminal
+   3. You should see a listed device similar to ```/dev/cu.usbserial-TI4MYIGN1```
+3. Naviagte to the root of this repository on your device
+4. Run ```pip install -r requirements.txt``` in a terminal to install dependencies
+5. Run ```python -m mculog_debugger.serial_reader``` or ```python3 -m mculog_debugger.serial_reader``` in the same terminal as above to start the reader
 
 
