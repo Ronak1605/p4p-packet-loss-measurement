@@ -1,1 +1,4 @@
 pyserial
+pyvisa
+pyvisa-py
+
