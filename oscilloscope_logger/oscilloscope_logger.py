@@ -1,20 +1,32 @@
-# scope_logger.py
-
 import pyvisa
 import time
 from datetime import datetime
 
 LOG_FILE = "scope_log.txt"
-RESOURCE = '/dev/usbtmc0'  # USBTMC path
 
 def log_scope_measurements():
     try:
-        rm = pyvisa.ResourceManager('@py')
-        scope = rm.open_resource(RESOURCE)
-        scope.timeout = 3000  # milliseconds
+        rm = pyvisa.ResourceManager('@py')  # use pyvisa-py backend
+        instruments = rm.list_resources()
+
+        print("Found resources:", instruments)
+
+        # Try to find the scope by checking for USB instruments
+        scope_resource = None
+        for res in instruments:
+            if "USB" in res:
+                scope_resource = res
+                break
+
+        if not scope_resource:
+            print("No USB oscilloscope found.")
+            return
+
+        scope = rm.open_resource(scope_resource)
+        scope.timeout = 3000  # ms
 
         print(f"Connected to: {scope.query('*IDN?').strip()}")
-        print(f" Logging Vpp from CH1 every second... (Log: {LOG_FILE})")
+        print(f"Logging Vpp from CH1 every second... (Log: {LOG_FILE})")
 
         with open(LOG_FILE, "a") as f:
             while True:
