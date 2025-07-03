@@ -60,22 +60,22 @@ def log_scope_measurements():
                     scope.write(b":MEASure:VPP? CHAN1\n")
                     vpp_ch1 = scope.read(100).decode().strip()
 
-                    # Read Vrms from CHAN2
-                    scope.write(b":MEASure:VRMS? CHAN2\n")
-                    vrms_ch2 = scope.read(100).decode().strip()
+                    # Read AC RMS from CHAN2
+                    scope.write(b":MEASure:ACRMS? CHAN2\n")
+                    acrms_ch2 = scope.read(100).decode().strip()
                     # current_ch2 = convert_vrms_to_current(vrms_ch2, PROBE_GAIN_MV_PER_A["CHAN2"], "CHAN2")
 
-                    # Read Vrms from CHAN3
-                    scope.write(b":MEASure:VRMS? CHAN3\n")
-                    vrms_ch3 = scope.read(100).decode().strip()
+                    # Read AC RMS from CHAN3
+                    scope.write(b":MEASure:ACRMS? CHAN3\n")
+                    acrms_ch3 = scope.read(100).decode().strip()
                     # current_ch3 = convert_vrms_to_current(vrms_ch3, PROBE_GAIN_MV_PER_A["CHAN3"], "CHAN3")
 
                     # Log
                     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
                     log_entry = (
                         f"{timestamp} - Vpp CH1: {vpp_ch1} V, "
-                        f"Vrms CH2: {vrms_ch2} A, "
-                        f"Vrms CH3: {vrms_ch3} A"
+                        f"AC RMS CH2: {acrms_ch2} A, "
+                        f"AC RMS CH3: {acrms_ch3} A"
                     )
                     print(log_entry)
                     log_file.write(log_entry + "\n")
