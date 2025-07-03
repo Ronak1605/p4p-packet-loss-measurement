@@ -16,6 +16,16 @@ RECONNECT_DELAY = 5  # seconds
 def log_packet_loss_event(reason: str):
     """Logs a timestamped error or packet loss event."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+
+    # If the reason is a keyboard interrupt, log it differently
+    if reason == "Logging interrupted by user.":
+        entry = f"{timestamp} - Logging interrupted by user."
+        print(entry)
+        with open(ERROR_LOG_FILE, "a") as f:
+            f.write(entry + "\n")
+        return
+    
+    # For actual errors, log accordingly
     entry = f"{timestamp} - PACKET LOSS or ERROR: {reason}"
     print(entry)
     with open(ERROR_LOG_FILE, "a") as f:
