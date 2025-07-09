@@ -1,112 +1,151 @@
-import os
+import pyvisa
 import time
+import csv
+from statistics import mean, median
 from datetime import datetime
 
-# === Probe sensitivity in mV/A for each channel ===
-PROBE_GAIN_MV_PER_A = {
-    "CHAN2": 70,  # CH2 connected to RCP300XS
-    "CHAN3": 70,  # CH3 connected to RCP300XS
-}
+import test_config  # your config file
 
-SCOPE_DEVICE = "/dev/usbtmc0"
-LOG_FILE = "scope_log.txt"
-ERROR_LOG_FILE = "packet_loss_log.txt"
-RECONNECT_DELAY = 5  # seconds
+# Use config vars
+cable_type = test_config.cable_type
+position = test_config.position
+power_state = test_config.power_state
+conduction_angle = test_config.conduction_angle
+PROBE_GAIN_MV_PER_A = test_config.PROBE_GAIN_MV_PER_A
 
-def log_packet_loss_event(reason: str):
-    """Logs a timestamped error or packet loss event."""
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+# USB VISA address (replace with actual scope USB VISA address)
+scope_usb_address = 'USB0::10893::5990::MY58493325::INSTR'
 
-    # If the reason is a keyboard interrupt, log it differently
-    if reason == "Logging interrupted by user.":
-        entry = f"{timestamp} - Logging interrupted by user."
-        print(entry)
-        with open(ERROR_LOG_FILE, "a") as f:
-            f.write(entry + "\n")
-        return
-    
-    # For actual errors, log accordingly
-    entry = f"{timestamp} - PACKET LOSS or ERROR: {reason}"
-    print(entry)
-    with open(ERROR_LOG_FILE, "a") as f:
-        f.write(entry + "\n")
+# Test parameters
+num_tests = 50
+timeout_sec = 2000  # ms
+
+# Get output file path
+base_name = "usb_test_results"
+full_path = test_config.get_next_test_filepath(base_name)
 
 def convert_vrms_to_current(vrms_str, gain_mV_per_A, channel):
-    """Convert Vrms to current using probe gain (in mV/A)."""
     try:
         vrms = float(vrms_str)
-        sensitivity_V_per_A = gain_mV_per_A / 1000.0  # Convert mV to V
-        current = vrms / sensitivity_V_per_A
-        return current
+        sensitivity_V_per_A = gain_mV_per_A / 1000.0
+        return round(vrms / sensitivity_V_per_A, 6)
     except ValueError:
-        log_packet_loss_event(f"Invalid VRMS value from {channel}: '{vrms_str}'")
+        print(f"Invalid VRMS value from {channel}: '{vrms_str}'")
         return float("nan")
 
-def connect_to_scope():
-    """Try to connect to the oscilloscope. Retry loop if not found."""
-    while not os.path.exists(SCOPE_DEVICE):
-        log_packet_loss_event("Oscilloscope not connected. Retrying...")
-        time.sleep(RECONNECT_DELAY)
+# Connect to scope
+rm = pyvisa.ResourceManager()
+scope = rm.open_resource(scope_usb_address)
+scope.timeout = timeout_sec
+
+results = []
+response_times = []
+success_count = 0
+
+print(f"Starting USB + measurement test: {full_path}")
+start_time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+test_start = time.time()
+
+for n in range(num_tests):
+    t0 = time.time()
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
     try:
-        scope = open(SCOPE_DEVICE, "wb+", buffering=0)
-        scope.write(b"*IDN?\n")
-        idn = scope.read(100)
-        print("Connected to:", idn.decode().strip())
-        return scope
-    except Exception as e:
-        log_packet_loss_event(f"Failed to initialize communication: {e}")
-        time.sleep(RECONNECT_DELAY)
-        return connect_to_scope()
+        response = scope.query('*IDN?').strip()
+        elapsed = round((time.time() - t0) * 1000, 2)
 
-def log_scope_measurements():
-    """Continuously logs oscilloscope measurements to file."""
-    try:
-        with open(LOG_FILE, "a") as log_file:
-            scope = connect_to_scope()
+        if response == "KEYSIGHT TECHNOLOGIES,DSO-X 3024T,MY58493325,07.20.2017102614":
+            response_times.append(elapsed)
 
-            while True:
-                try:
-                    # Read Vpp from Channel 1
-                    scope.write(b":MEASure:VPP? CHAN1\n")
-                    vpp_ch1 = scope.read(100).decode().strip()
+            v_rms = scope.query(":MEASure:VRMS? CHAN1").strip()
+            acrms_ch2 = scope.query(":MEASure:ACRMS? CHAN2").strip()
+            acrms_ch3 = scope.query(":MEASure:ACRMS? CHAN3").strip()
 
-                    # Read AC RMS from CHAN2
-                    scope.write(b":MEASure:ACRMS? CHAN2\n")
-                    acrms_ch2 = scope.read(100).decode().strip()
-                    # current_ch2 = convert_vrms_to_current(vrms_ch2, PROBE_GAIN_MV_PER_A["CHAN2"], "CHAN2")
+            results.append([
+                n + 1,
+                timestamp,
+                "Success",
+                elapsed,
+                response,
+                v_rms,
+                acrms_ch2,
+                acrms_ch3,
+            ])
+            success_count += 1
 
-                    # Read AC RMS from CHAN3
-                    scope.write(b":MEASure:ACRMS? CHAN3\n")
-                    acrms_ch3 = scope.read(100).decode().strip()
-                    # current_ch3 = convert_vrms_to_current(vrms_ch3, PROBE_GAIN_MV_PER_A["CHAN3"], "CHAN3")
+            print(f"[{n+1}/{num_tests}] {elapsed} ms | V RMS CH1: {v_rms} V | CH2: {acrms_ch2} A | CH3: {acrms_ch3} A")
 
-                    # Log
-                    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
-                    log_entry = (
-                        f"{timestamp} - Vpp CH1: {vpp_ch1} V, "
-                        f"AC RMS CH2: {acrms_ch2} A, "
-                        f"AC RMS CH3: {acrms_ch3} A"
-                    )
-                    print(log_entry)
-                    log_file.write(log_entry + "\n")
+        else:
+            print(f"[{n+1}/{num_tests}] Unexpected response: {response}")
+            results.append([
+                n + 1,
+                timestamp,
+                "Unexpected Response",
+                elapsed,
+                response,
+                "", "", ""
+            ])
 
-                except (OSError, IOError) as io_err:
-                    log_packet_loss_event(f"Communication lost: {io_err}")
-                    scope.close()
-                    time.sleep(RECONNECT_DELAY)
-                    scope = connect_to_scope()
+    except Exception as err:
+        elapsed = round((time.time() - t0) * 1000, 2)
+        results.append([
+            n + 1,
+            timestamp,
+            "Timeout/Error",
+            elapsed,
+            str(err),
+            "", "", ""
+        ])
+        print(f"[{n+1}/{num_tests}] Timeout/Error after {elapsed} ms: {err}")
 
-                except Exception as unknown_err:
-                    log_packet_loss_event(f"Unexpected error: {unknown_err}")
-                    scope.close()
-                    break
+    time.sleep(1)
 
-                time.sleep(1)
+# Summary Stats
+test_end = time.time()
+end_time_str = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+total_duration = round(test_end - test_start, 2)
 
-    except KeyboardInterrupt:
-        log_packet_loss_event("Logging interrupted by user.")
-    except Exception as outer_err:
-        log_packet_loss_event(f"Logger crashed: {outer_err}")
+loss = num_tests - success_count
+loss_percent = round((loss / num_tests) * 100, 2)
+if response_times:
+    mean_time = round(mean(response_times), 2)
+    median_time = round(median(response_times), 2)
+    min_time = round(min(response_times), 2)
+    max_time = round(max(response_times), 2)
+else:
+    mean_time = median_time = min_time = max_time = "N/A"
 
-if __name__ == "__main__":
-    log_scope_measurements()
+# Write to CSV
+with open(full_path, 'w', newline='') as f:
+    writer = csv.writer(f)
+
+    writer.writerow(["USB Test with Measurement Logging"])
+    writer.writerow(["Start Time", start_time_str])
+    writer.writerow(["End Time", end_time_str])
+    writer.writerow(["Cable Type", cable_type])
+    writer.writerow(["Position", position])
+    writer.writerow(["Power State", power_state])
+    writer.writerow(["Conduction Angle", conduction_angle])
+    writer.writerow(["Total Attempts", num_tests])
+    writer.writerow(["Successful Responses", success_count])
+    writer.writerow(["Lost Packets", loss])
+    writer.writerow(["Loss %", loss_percent])
+    writer.writerow(["Mean Response Time (ms)", mean_time])
+    writer.writerow(["Median Response Time (ms)", median_time])
+    writer.writerow(["Min Response Time (ms)", min_time])
+    writer.writerow(["Max Response Time (ms)", max_time])
+    writer.writerow(["Total Duration (s)", total_duration])
+    writer.writerow([])
+
+    writer.writerow([
+        "Attempt", "Timestamp", "Status", "Response Time (ms)", "Response",
+        "V RMS CH1 (V)", "AC RMS CH2 (A)", "AC RMS CH3 (A)"
+    ])
+    writer.writerows(results)
+
+print("\nTest completed.")
+print(f"File saved to: {full_path}")
+print(f"Start time: {start_time_str}")
+print(f"End time: {end_time_str}")
+print(f"Successful responses: {success_count}")
+print(f"Lost packets: {loss} ({loss_percent:.2f}%)")
+print(f"Mean: {mean_time} ms | Median: {median_time} ms | Min: {min_time} ms | Max: {max_time} ms")
