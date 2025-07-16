@@ -3,7 +3,7 @@ import test_config
 from packet_loss_tester import PacketLossTester
 
 # LAN settings
-scope_ip = '169.254.212.203'
+scope_ip = '169.254.148.143'
 num_tests = 50
 timeout_sec = 2
 

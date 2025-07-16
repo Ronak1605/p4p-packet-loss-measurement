@@ -1,10 +1,10 @@
 import os
 
 # === Configurable Test Info (CHANGE FOR EACH TEST) ===
-cable_type = 'usb'
-position = 'test_switches'
+cable_type = 'lan'
+position = 'test_ac_output'
 power_state = '60V'
-conduction_angle = '120deg'
+conduction_angle = '120_deg'
 
 # === Probe sensitivity in mV/A ===
 PROBE_GAIN_MV_PER_A = {
@@ -13,7 +13,7 @@ PROBE_GAIN_MV_PER_A = {
 }
 
 # === Folder and Filename Convention ===
-def get_next_test_filepath(base_name: str, root_folder: str = "results_2"):
+def get_next_test_filepath(base_name: str, root_folder: str = "results_3"):
     test_folder = os.path.join(root_folder, cable_type, position, power_state, conduction_angle)
     os.makedirs(test_folder, exist_ok=True)
 

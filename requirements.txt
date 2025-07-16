@@ -2,3 +2,7 @@ pyserial
 pyvisa
 pyvisa-py
 pyusb
+pandas
+matplotlib
+seaborn
+numpy
