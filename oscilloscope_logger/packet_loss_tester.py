@@ -6,7 +6,7 @@ from typing import List, Tuple, Optional, Dict, Any
 import test_config
 
 class PacketLossTester:
-    def __init__(self, scope, connection_type: str, num_tests: int = 50):
+    def __init__(self, scope, connection_type: str, num_tests: int = 100):
         self.scope = scope
         self.connection_type = connection_type
         self.num_tests = num_tests
@@ -15,8 +15,13 @@ class PacketLossTester:
         self.success_count = 0
         self.expected_response = "KEYSIGHT TECHNOLOGIES,DSO-X 3024T,MY58493325,07.20.2017102614"
         
-    def run_test(self, delay_between_tests: float = 1.0) -> Dict[str, Any]:
-        """Run the packet loss test and return results"""
+    def run_test(self, delay_between_tests: float = 0) -> Dict[str, Any]:
+        """Run the packet loss test and return results
+        Args:
+            delay_between_tests (float): Delay in seconds between each test attempt. If too small, it will do it as fast as possible.
+        Returns:
+            Dict[str, Any]: Summary statistics including success count, loss count, and response times.
+        """
         print(f"Starting {self.connection_type} test with {self.num_tests} attempts")
         
         start_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')

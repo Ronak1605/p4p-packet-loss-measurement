@@ -4,7 +4,7 @@ from packet_loss_tester import PacketLossTester
 
 # LAN settings
 scope_ip = '169.254.148.143'
-num_tests = 50
+num_tests = 100
 timeout_sec = 2
 
 # Get output file path
@@ -18,7 +18,7 @@ def main():
     
     # Create tester and run test
     tester = PacketLossTester(scope, "LAN", num_tests)
-    stats = tester.run_test(delay_between_tests=1.0)
+    stats = tester.run_test(delay_between_tests=0)  # Reduced delay for faster testing
     
     # Save results and print summary
     tester.save_results_to_csv(full_path, stats)
