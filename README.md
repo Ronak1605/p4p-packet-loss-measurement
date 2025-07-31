@@ -21,3 +21,6 @@ The relevant file is `oscilloscope_logger.oscilloscope_logger` which logs the in
 3. Run ```pip install -r requirements.txt``` in a terminal to install dependencies
 4. Run ```python -m oscilloscope_logger.oscilloscope_logger``` or ```python3 -m oscilloscope_logger.oscilloscope_logger``` in the same terminal as above to start the reader
 
+
+### Visualisation for Shielded vs Unshielded Cables
+python3 -m oscilloscope_logger.visualise_results --compare oscilloscope_logger/results/lan/cable/shielded/high_power_120deg/lan_test_results_lan_test_ac_output_60V_120_deg_test_0021.csv oscilloscope_logger/results/lan/cable/shielded/high_power_120deg/lan_test_results_lan_test_ac_output_60V_120_deg_test_0022.csv oscilloscope_logger/results/lan/cable/shielded/high_power_120deg/lan_test_results_lan_test_ac_output_60V_120_deg_test_0023.csv oscilloscope_logger/results/lan/cable/unshielded/High_power_120deg/lan_test_results_lan_test_ac_output_60V_120_deg_test_0018.csv oscilloscope_logger/results/lan/cable/unshielded/High_power_120deg/lan_test_results_lan_test_ac_output_60V_120_deg_test_0019.csv oscilloscope_logger/results/lan/cable/unshielded/High_power_120deg/lan_test_results_lan_test_ac_output_60V_120_deg_test_0020.csv
