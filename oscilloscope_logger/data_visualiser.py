@@ -131,7 +131,8 @@ class TestDataVisualiser:
             data = self.load_csv_data(path)
             test_data_list.append(data)
         
-        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
+        # Use a more compact figure size and single row layout
+        fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 6))
         
         # Response time comparison
         for i, test_data in enumerate(test_data_list):
@@ -139,14 +140,17 @@ class TestDataVisualiser:
             metadata = test_data["metadata"]
             success_df = df[df['Status'] == 'Success']
             
-            label = f"{metadata.get('Cable Type', 'Unknown')} - {Path(test_data['file_path']).stem}"
+            # Use a shorter label (just show cable type and test number)
+            file_name = Path(test_data['file_path']).name
+            test_num = file_name.split('_')[-1].split('.')[0]  # Extract test number
+            label = f"{metadata.get('Cable Type', 'Unknown')}-{test_num}"
             ax1.plot(success_df['Attempt'], success_df['Response Time (ms)'], 
                     'o-', markersize=2, label=label, alpha=0.7)
         
         ax1.set_xlabel('Test Attempt')
         ax1.set_ylabel('Response Time (ms)')
         ax1.set_title('Response Time Comparison')
-        ax1.legend()
+        ax1.legend(loc='upper right', fontsize='small')
         ax1.grid(True, alpha=0.3)
         
         # Box plot comparison
@@ -158,12 +162,18 @@ class TestDataVisualiser:
             metadata = test_data["metadata"]
             success_df = df[df['Status'] == 'Success']
             response_times_data.append(success_df['Response Time (ms)'].values)
-            labels.append(f"{metadata.get('Cable Type', 'Unknown')}")
+            
+            # Use a shorter label for boxplot
+            file_name = Path(test_data['file_path']).name
+            test_num = file_name.split('_')[-1].split('.')[0]
+            labels.append(f"{metadata.get('Cable Type', 'Unknown')}-{test_num}")
         
         ax2.boxplot(response_times_data, labels=labels)
         ax2.set_ylabel('Response Time (ms)')
         ax2.set_title('Response Time Distribution Comparison')
         ax2.grid(True, alpha=0.3)
+        # Rotate x-labels for better readability
+        plt.setp(ax2.get_xticklabels(), rotation=45, ha='right')
         
         plt.tight_layout()
         

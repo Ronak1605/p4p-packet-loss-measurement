@@ -2,8 +2,27 @@
 import sys
 import argparse
 import os
-from data_visualiser import TestDataVisualiser, visualise_single_test, compare_usb_vs_lan, create_comprehensive_report
+import importlib.util
 
+# Ensure we can import the data_visualiser module
+current_dir = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(current_dir)
+
+# Import with fallback approach
+try:
+    from data_visualiser import TestDataVisualiser, visualise_single_test, compare_usb_vs_lan, create_comprehensive_report
+except ImportError:
+    # Alternative import approach
+    spec = importlib.util.spec_from_file_location("data_visualiser", 
+                                                 os.path.join(current_dir, "data_visualiser.py"))
+    data_visualiser = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(data_visualiser)
+    
+    TestDataVisualiser = data_visualiser.TestDataVisualiser
+    visualise_single_test = data_visualiser.visualise_single_test
+    compare_usb_vs_lan = data_visualiser.compare_usb_vs_lan
+    create_comprehensive_report = data_visualiser.create_comprehensive_report
+    
 def main():
     parser = argparse.ArgumentParser(description='Visualise packet loss test data')
     parser.add_argument('--single', type=str, help='Path to single CSV file to visualise')

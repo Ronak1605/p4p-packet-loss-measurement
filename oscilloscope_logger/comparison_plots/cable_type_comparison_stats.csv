@@ -1,0 +1,7 @@
+Test,Cable Type,Mean (ms),Median (ms),Min (ms),Max (ms),Std Dev (ms),Lost Packets,Loss %
+Shielded-1,Shielded,16.89,14.76,13.89,112.04,13.77,0,0.0
+Shielded-2,Shielded,14.68,14.66,14.24,15.18,0.24,0,0.0
+Shielded-3,Shielded,19.06,14.68,13.83,219.01,28.92,0,0.0
+Unshielded-1,Unshielded,19.24,14.61,13.41,220.22,29.12,0,0.0
+Unshielded-2,Unshielded,18.7,14.64,14.0,216.01,28.48,0,0.0
+Unshielded-3,Unshielded,18.9,14.74,14.09,222.51,29.38,0,0.0
