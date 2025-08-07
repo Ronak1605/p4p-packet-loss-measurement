@@ -1,8 +1,8 @@
 import os
 
 # === Configurable Test Info (CHANGE FOR EACH TEST) ===
-cable_type = 'lan'
-position = 'test_ac_output'
+cable_type = 'lan_cat6_unshielded_stripped'
+position = 'antenna_tuning_inverter_gap'
 power_state = '60V'
 conduction_angle = '120_deg'
 
@@ -13,7 +13,7 @@ PROBE_GAIN_MV_PER_A = {
 }
 
 # === Folder and Filename Convention ===
-def get_next_test_filepath(base_name: str, root_folder: str = "results_3"):
+def get_next_test_filepath(base_name: str, root_folder: str = "results_5"):
     test_folder = os.path.join(root_folder, cable_type, position, power_state, conduction_angle)
     os.makedirs(test_folder, exist_ok=True)
 
