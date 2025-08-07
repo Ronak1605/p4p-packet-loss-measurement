@@ -24,3 +24,11 @@ The relevant file is `oscilloscope_logger.oscilloscope_logger` which logs the in
 
 ### Visualisation for Shielded vs Unshielded Cables
 python3 -m oscilloscope_logger.visualise_results --compare oscilloscope_logger/results/lan/cable/shielded/high_power_120deg/lan_test_results_lan_test_ac_output_60V_120_deg_test_0021.csv oscilloscope_logger/results/lan/cable/shielded/high_power_120deg/lan_test_results_lan_test_ac_output_60V_120_deg_test_0022.csv oscilloscope_logger/results/lan/cable/shielded/high_power_120deg/lan_test_results_lan_test_ac_output_60V_120_deg_test_0023.csv oscilloscope_logger/results/lan/cable/unshielded/High_power_120deg/lan_test_results_lan_test_ac_output_60V_120_deg_test_0018.csv oscilloscope_logger/results/lan/cable/unshielded/High_power_120deg/lan_test_results_lan_test_ac_output_60V_120_deg_test_0019.csv oscilloscope_logger/results/lan/cable/unshielded/High_power_120deg/lan_test_results_lan_test_ac_output_60V_120_deg_test_0020.csv
+
+### Router Packet Loss Testing:
+#### TCP
+Communicate to the router via a wired LAN connection. 
+
+1. Navigate to `pc_to_router_logger` in your code space
+2. Find the IP of the router on your PC
+3. Run ```python router_test.py <router ip>``` or ```python router_test.py <router ip>``` e.g. ```python3 router_test.py 192.168.0.1```, this will start the packet loss detection.
