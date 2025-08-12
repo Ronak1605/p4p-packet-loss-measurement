@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 import argparse
 import time
 import test_config
@@ -21,6 +20,8 @@ def main():
                         help='Use TCP instead of HTTP')
     parser.add_argument('--udp', action='store_true',
                         help='Use UDP protocol (requires echo server)')
+    parser.add_argument('--dynamic-http', action='store_true',
+                        help='Use dynamic HTTP test with TCP link check before requests')
     
     args = parser.parse_args()
     
@@ -43,8 +44,17 @@ def main():
     if use_udp:
         tester.use_udp = True
     
-    # Run test
-    protocol = "UDP" if use_udp else ("TCP" if use_tcp else "HTTP")
+    # Enable dynamic HTTP check if flag is set
+    tester.use_dynamic_http_check = args.dynamic_http
+    
+    # Determine protocol label for printing
+    if use_udp:
+        protocol = "UDP"
+    elif use_tcp:
+        protocol = "TCP"
+    else:
+        protocol = "Dynamic HTTP" if tester.use_dynamic_http_check else "HTTP"
+    
     print(f"Starting router packet loss test to {args.router_ip}:{args.port}")
     print(f"Testing {args.num_tests} packets with {args.delay}s delay between each")
     print(f"Using {protocol} protocol")
@@ -53,9 +63,13 @@ def main():
     stats = tester.run_test(delay_between_tests=args.delay)
     
     # Save results
-    file_path = test_config.get_next_test_filepath(f"router_{protocol.lower()}_test")
+    file_path = test_config.get_next_test_filepath(f"router_{protocol.lower().replace(' ', '_')}_test")
     tester.save_results_to_csv(file_path, stats)
     tester.print_summary(stats, file_path)
+    
+    # Close HTTP session and other persistent resources
+    tester.close()
+
 
 if __name__ == "__main__":
     main()

@@ -9,7 +9,7 @@ import test_config
 
 class PacketLossTester:
     def __init__(self, router_address: str, connection_type: str, num_tests: int = 200, 
-                port: int = 80, timeout: float = 2.0, use_http: bool = True):
+                port: int = 80, timeout: float = 2.0, use_http: bool = True, use_dynamic_http_check: bool = False):
         self.router_address = router_address  # IP address of the router
         self.connection_type = connection_type
         self.num_tests = num_tests
@@ -24,7 +24,13 @@ class PacketLossTester:
         self.test_message = "Test_packetloss_test_!@#$%^&*()KEYSIGHT TECHNOLOGIES,DSO-X 3024T,MY58493325,07.20.2017102614KEYSIGHT TECHNOLOGIES,DSO-X 3024T,MY58493325,07.20.2017102614KEYSIGHT TECHNOLOGIES,DSO-X 3024T,MY58493325,07.20.2017102614KEYSIGHT TECHNOLOGIES,DSO-X 3024T,MY58493325,07.20.2017102614KEYSIGHT TECHNOLOGIES,DSO-X 3024T,MY58493325,07.20.2017102614KEYSIGHT TECHNOLOGIES,DSO-X 3024T,MY58493325,07.20.2017102614Test_packetloss_test_!@#$%^&*()KEYSIGHT TECHNOLOGIES,DSO-X 3024T,MY58493325,07.20.2017102614KEYSIGHT TECHNOLOGIES,DSO-X 3024T,MY58493325,07.20.2017102614KEYSIGHT TECHNOLOGIES,DSO-X 3024T,MY58493325,07.20.2017102614KEYSIGHT TECHNOLOGIES,DSO-X 3024T,MY58493325,07.20.2017102614KEYSIGHT TECHNOLOGIES,DSO-X 3024T,MY58493325,07.20.2017102614KEYSIGHT TECHNOLOGIES,DSO-X 3024T,MY58493325,07.20.2017102614"
         
         # For HTTP store first successful response for comparison
-        self.reference_response: Optional[bytes] = None  
+        self.reference_response: Optional[bytes] = None
+
+        # Set flag for dynamic HTTP reconnection test
+        self.use_dynamic_http_check = use_dynamic_http_check
+        
+        # Session for keep-alive in dynamic HTTP test
+        self.session = requests.Session()
         
     def run_test(self, delay_between_tests: float = 0) -> Dict[str, Any]:
         """Run the packet loss test and return results
@@ -58,7 +64,10 @@ class PacketLossTester:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
         
         if self.use_http:
-            return self._run_http_test(attempt_num, t0, timestamp)
+            if self.use_dynamic_http_check:
+                return self._run_http_test_dynamic(attempt_num, t0, timestamp)
+            else:
+                return self._run_http_test(attempt_num, t0, timestamp)
         elif self.use_udp:
             return self._run_udp_test(attempt_num, t0, timestamp)
         else:
@@ -237,6 +246,88 @@ class PacketLossTester:
             elapsed = round((time.time() - t0) * 1000, 2)
             print(f"[{attempt_num}/{self.num_tests}] Error after {elapsed} ms: {err}")
             return [attempt_num, timestamp, "Error", elapsed, str(err)]
+        
+    
+    def is_tcp_port_open(self, ip: str, port: int, timeout: float = 1.0) -> bool:
+        """Check if TCP port is open (for dynamic HTTP test)"""
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+            sock.settimeout(timeout)
+            try:
+                sock.connect((ip, port))
+                return True
+            except:
+                return False
+    
+    def _run_http_test_dynamic(self, attempt_num: int, t0: float, timestamp: str) -> List:
+        """HTTP test with dynamic TCP link check before request to preemptively reconnect"""
+        if not self.is_tcp_port_open(self.router_address, self.port, timeout=1.0):
+            elapsed = round((time.time() - t0) * 1000, 2)
+            print(f"[{attempt_num}/{self.num_tests}] TCP port {self.port} not open before HTTP request, skipping attempt.")
+            return [attempt_num, timestamp, "TCP Port Closed", elapsed, f"TCP port {self.port} closed; skipping HTTP request"]
+
+        try:
+            url = f"http://{self.router_address}"
+            # Use the persistent session for keep-alive
+            response = self.session.get(url, timeout=self.timeout)
+            elapsed = round((time.time() - t0) * 1000, 2)
+            status_code = response.status_code
+
+            if not hasattr(response, 'content') or response.content is None:
+                print(f"[{attempt_num}/{self.num_tests}] Response content is None")
+                return [attempt_num, timestamp, "Error", elapsed, "Response content is None"]
+
+            content = response.content
+
+            if status_code == 200 and self.reference_response is None:
+                self.reference_response = content
+                print(f"[{attempt_num}/{self.num_tests}] Captured reference response, size: {len(content)} bytes")
+                return [attempt_num, timestamp, "Success", elapsed,
+                        f"HTTP {status_code} | Size: {len(content)} bytes | Reference captured | Content: {content}"]
+
+            if status_code == 200 and self.reference_response is not None:
+                if len(content) != len(self.reference_response):
+                    mismatch = f"Size mismatch: got {len(content)} bytes, expected {len(self.reference_response)} bytes"
+                    print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Content Error | {mismatch}")
+                    return [attempt_num, timestamp, "Content Error", elapsed,
+                            f"HTTP {status_code} | {mismatch} | Content: {content}"]
+
+                mismatches = []
+                for i, (c1, c2) in enumerate(zip(content, self.reference_response)):
+                    if c1 != c2:
+                        mismatches.append((i, c1, c2))
+                        if len(mismatches) >= 5:
+                            break
+
+                if mismatches:
+                    mismatch_details = "; ".join([f"Pos {pos}: {chr(c1) if c1 < 128 else hex(c1)} != {chr(c2) if c2 < 128 else hex(c2)}"
+                                                for pos, c1, c2 in mismatches])
+                    print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Character Mismatch | {len(mismatches)} differences")
+                    return [attempt_num, timestamp, "Character Mismatch", elapsed,
+                            f"HTTP {status_code} | {len(mismatches)} character differences: {mismatch_details} | Content: {content}"]
+                else:
+                    print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Success | Perfect match")
+                    return [attempt_num, timestamp, "Success", elapsed,
+                            f"HTTP {status_code} | Size: {len(content)} bytes | Perfect character match | Content: {content}"]
+            else:
+                content_size = len(content) if content else 0
+                print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Unexpected Response | HTTP {status_code}")
+                return [attempt_num, timestamp, "Unexpected Response", elapsed,
+                        f"HTTP {status_code} | Size: {content_size} bytes | No reference to compare against | Content: {content}"]
+
+        except requests.exceptions.Timeout:
+            elapsed = round((time.time() - t0) * 1000, 2)
+            print(f"[{attempt_num}/{self.num_tests}] HTTP Timeout after {elapsed} ms")
+            return [attempt_num, timestamp, "Timeout", elapsed, "HTTP request timed out"]
+
+        except requests.exceptions.ConnectionError:
+            elapsed = round((time.time() - t0) * 1000, 2)
+            print(f"[{attempt_num}/{self.num_tests}] Connection error after {elapsed} ms")
+            return [attempt_num, timestamp, "Error", elapsed, "Connection error"]
+
+        except Exception as err:
+            elapsed = round((time.time() - t0) * 1000, 2)
+            print(f"[{attempt_num}/{self.num_tests}] Error after {elapsed} ms: {err}")
+            return [attempt_num, timestamp, "Error", elapsed, str(err)]
             
     def _calculate_summary_stats(self, start_time_str: str, test_start: float, test_end: float) -> Dict[str, Any]:
         """Calculate summary statistics"""
@@ -313,3 +404,8 @@ class PacketLossTester:
         print(f"Successful responses: {stats['success_count']}")
         print(f"Lost packets: {stats['loss_count']} ({stats['loss_percent']:.2f}%)")
         print(f"Mean: {stats['mean_time']} ms | Median: {stats['median_time']} ms | Min: {stats['min_time']} ms | Max: {stats['max_time']} ms")
+        
+    def close(self):
+        """Close any persistent resources like HTTP session"""
+        if self.session:
+            self.session.close()
