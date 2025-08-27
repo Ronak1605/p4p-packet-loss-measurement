@@ -259,7 +259,11 @@ class PacketLossTester:
         elif self.use_udp:
             return self._run_udp_test(attempt_num, t0, timestamp)
         else:
-            return self._run_tcp_test(attempt_num, t0, timestamp)
+            # For raw TCP tests
+            if self.use_dynamic_http_check:
+                return self._run_tcp_test_dynamic(attempt_num, t0, timestamp)
+            else:
+                return self._run_tcp_test(attempt_num, t0, timestamp)
     
     def _run_http_test(self, attempt_num: int, t0: float, timestamp: str) -> List:
         """Send HTTP request to router and analyze response character by character"""
@@ -489,6 +493,134 @@ class PacketLossTester:
             elapsed = round((time.time() - t0) * 1000, 2)
             print(f"[{attempt_num}/{self.num_tests}] Error after {elapsed} ms: {err}")
             return [attempt_num, timestamp, "Error", elapsed, str(err), 0]
+        
+    def _run_tcp_test_dynamic(self, attempt_num: int, t0: float, timestamp: str) -> List:
+        """Raw TCP test with dynamic TCP port check before request (similar to HTTP dynamic)."""
+        # 1. TCP pre-check
+        tcp_check_start = time.time()
+        port_open = self.is_tcp_port_open(self.router_address, self.port, timeout=1.0)
+        tcp_check_elapsed = round((time.time() - tcp_check_start) * 1000, 2)
+        tcp_check_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+
+        if not port_open:
+            elapsed = round((time.time() - t0) * 1000, 2)
+            print(f"[{attempt_num}/{self.num_tests}] TCP port {self.port} not open before TCP request, skipping attempt. (TCP check: {tcp_check_elapsed} ms)")
+            return [attempt_num, timestamp, "TCP Port Closed", elapsed,
+                    f"TCP port {self.port} closed at {tcp_check_time}; TCP check took {tcp_check_elapsed}ms; skipping raw TCP request"]
+
+        try:
+            # 2. Open socket & send HTTP GET
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+                sock.settimeout(self.timeout)
+                sock.connect((self.router_address, self.port))
+
+                req = (
+                    f"GET / HTTP/1.1\r\n"
+                    f"Host: {self.router_address}\r\n"
+                    f"User-Agent: PacketLossTester/1.0\r\n"
+                    f"Accept: */*\r\n"
+                    f"Accept-Encoding: identity\r\n"
+                    f"Connection: close\r\n"
+                    f"\r\n"
+                ).encode("ascii", errors="ignore")
+
+                http_start_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+                sock.sendall(req)
+
+                # 3. Read response
+                chunks = []
+                while True:
+                    try:
+                        data = sock.recv(4096)
+                        if not data:
+                            break
+                        chunks.append(data)
+                    except socket.timeout:
+                        break
+
+                http_complete_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+                raw = b"".join(chunks)
+                elapsed = round((time.time() - t0) * 1000, 2)
+                tcp_info = f"TCP:{tcp_check_time} ({tcp_check_elapsed}ms) | HTTP:{http_start_time}->{http_complete_time}"
+
+                if not raw:
+                    print(f"[{attempt_num}/{self.num_tests}] Empty response")
+                    return [attempt_num, timestamp, "Empty Response", elapsed, f"{tcp_info} | No data received"]
+
+                # Separate headers/body
+                header_end = raw.find(b"\r\n\r\n")
+                if header_end == -1:
+                    preview = raw[:80].decode("utf-8", errors="ignore")
+                    print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Non-HTTP response")
+                    return [attempt_num, timestamp, "Error", elapsed, f"{tcp_info} | Non-HTTP response: {preview}"]
+
+                headers = raw[:header_end].decode("iso-8859-1", errors="ignore")
+                body = raw[header_end + 4 :]
+
+                # Parse status code
+                first_line = headers.split("\r\n", 1)[0]
+                try:
+                    parts = first_line.split()
+                    status_code = int(parts[1]) if len(parts) > 1 else 0
+                except Exception:
+                    status_code = 0
+
+                # Reference capture/compare (same as base TCP test)
+                if status_code == 200 and self.reference_response is None:
+                    self.reference_response = body
+                    print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Success | Reference captured (size {len(body)} bytes)")
+                    return [attempt_num, timestamp, "Success", elapsed,
+                            f"{tcp_info} | HTTP {status_code} | Size: {len(body)} bytes | Reference captured"]
+
+                if status_code == 200 and self.reference_response is not None:
+                    if len(body) != len(self.reference_response):
+                        mismatch = f"Size mismatch: got {len(body)} bytes, expected {len(self.reference_response)} bytes"
+                        print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Content Error | {mismatch}")
+                        return [attempt_num, timestamp, "Content Error", elapsed,
+                                f"{tcp_info} | HTTP {status_code} | {mismatch}"]
+
+                    mismatches = []
+                    for i, (c1, c2) in enumerate(zip(body, self.reference_response)):
+                        if c1 != c2:
+                            mismatches.append((i, c1, c2))
+                            if len(mismatches) >= 5:
+                                break
+
+                    if mismatches:
+                        mismatch_details = "; ".join(
+                            [f"Pos {pos}: {chr(c1) if c1 < 128 else hex(c1)} != {chr(c2) if c2 < 128 else hex(c2)}"
+                            for pos, c1, c2 in mismatches]
+                        )
+                        print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Character Mismatch | {len(mismatches)} diffs")
+                        return [attempt_num, timestamp, "Character Mismatch", elapsed,
+                                f"{tcp_info} | HTTP {status_code} | {len(mismatches)} character differences: {mismatch_details}"]
+                    else:
+                        print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Success | Perfect match")
+                        return [attempt_num, timestamp, "Success", elapsed,
+                                f"{tcp_info} | HTTP {status_code} | Size: {len(body)} bytes | Perfect character match"]
+
+                print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Unexpected Response | HTTP {status_code}")
+                return [attempt_num, timestamp, "Unexpected Response", elapsed,
+                        f"{tcp_info} | HTTP {status_code} | Size: {len(body)} bytes"]
+
+        except socket.timeout:
+            elapsed = round((time.time() - t0) * 1000, 2)
+            print(f"[{attempt_num}/{self.num_tests}] TCP Timeout after {elapsed} ms")
+            return [attempt_num, timestamp, "Timeout", elapsed,
+                    f"TCP:{tcp_check_time} ({tcp_check_elapsed}ms) | Connection timed out"]
+
+        except ConnectionRefusedError:
+            elapsed = round((time.time() - t0) * 1000, 2)
+            print(f"[{attempt_num}/{self.num_tests}] Connection refused after {elapsed} ms")
+            return [attempt_num, timestamp, "Error", elapsed,
+                    f"TCP:{tcp_check_time} ({tcp_check_elapsed}ms) | Connection refused"]
+
+        except Exception as err:
+            elapsed = round((time.time() - t0) * 1000, 2)
+            print(f"[{attempt_num}/{self.num_tests}] Error after {elapsed} ms: {err}")
+            return [attempt_num, timestamp, "Error", elapsed,
+                    f"TCP:{tcp_check_time} ({tcp_check_elapsed}ms) | {err}"]
+
 
         
     def _run_udp_test(self, attempt_num: int, t0: float, timestamp: str) -> List:
