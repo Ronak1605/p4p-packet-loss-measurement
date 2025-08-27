@@ -1,8 +1,8 @@
 import os
 
 # === Configurable Test Info (CHANGE FOR EACH TEST) ===
-communication_type = 'tcp&http_reconnect'
-cable_type = 'lan_cat6_utp'
+communication_type = 'http'
+cable_type = 'lan_cat6_utp_weakened'
 antenna_position = 'metal_benchtop_taped'
 power_state = '60V'
 conduction_angle = '120_deg'
@@ -14,7 +14,7 @@ PROBE_GAIN_MV_PER_A = {
 }
 
 # === Folder and Filename Convention ===
-def get_next_test_filepath(base_name: str, root_folder: str = "results2"):
+def get_next_test_filepath(base_name: str, root_folder: str = "results4"):
     test_folder = os.path.join(root_folder, communication_type, cable_type, antenna_position, power_state, conduction_angle)
     os.makedirs(test_folder, exist_ok=True)
 

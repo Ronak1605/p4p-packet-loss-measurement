@@ -1,0 +1,12 @@
+Test Name,Cable Type,Mean Time (s),Total Time (s),Success Rate (%),Sample Count
+router_http,Modified Cable,0.2994,35.27,97.0,100
+router_http,Modified Cable,0.2338,259.65,98.7,1000
+router_http,Modified Cable,0.2894,32.56,98.0,100
+router_http,Modified Cable,0.2489,25.04,100.0,100
+router_http,Modified Cable,0.2725,31.02,98.0,100
+router_http,Modified Cable,0.2671,33.89,96.0,100
+router_http,Unmodified Cable,0.0296,3.07,100.0,100
+router_http,Unmodified Cable,0.0297,3.09,100.0,100
+router_http,Unmodified Cable,0.0298,3.1,100.0,100
+router_http,Unmodified Cable,0.0296,3.08,100.0,100
+router_http,Unmodified Cable,0.0298,3.11,100.0,100
