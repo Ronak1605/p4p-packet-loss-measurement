@@ -354,53 +354,142 @@ class PacketLossTester:
             return [attempt_num, timestamp, "Error", elapsed, str(err), "Retries attempted:", {retries_attempted} ]
     
     def _run_tcp_test(self, attempt_num: int, t0: float, timestamp: str) -> List:
-        """Send TCP data to router and analyze response"""
+        """Send a raw-socket HTTP GET (same as HTTP test) and analyze response."""
         try:
-            # Create socket for this test
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
                 sock.settimeout(self.timeout)
-                
-                # Connect to router
                 sock.connect((self.router_address, self.port))
-                
-                # Send test message
-                sock.sendall(self.test_message.encode('utf-8'))
-                
-                # Receive response
-                response_bytes = sock.recv(4096)
-                response_text = response_bytes.decode('utf-8', errors='ignore').strip()
-                
-                # Calculate elapsed time
+
+                # Build a simple HTTP/1.1 GET like requests would, but force identity encoding.
+                req = (
+                    f"GET / HTTP/1.1\r\n"
+                    f"Host: {self.router_address}\r\n"
+                    f"User-Agent: PacketLossTester/1.0\r\n"
+                    f"Accept: */*\r\n"
+                    f"Accept-Encoding: identity\r\n"
+                    f"Connection: close\r\n"
+                    f"\r\n"
+                ).encode("ascii", errors="ignore")
+
+                sock.sendall(req)
+
+                # Read until the server closes (Connection: close) or we hit timeout.
+                chunks = []
+                while True:
+                    try:
+                        data = sock.recv(4096)
+                        if not data:
+                            break
+                        chunks.append(data)
+                    except socket.timeout:
+                        # Stop reading on timeout; treat whatever we have as the response.
+                        break
+
+                raw = b"".join(chunks)
                 elapsed = round((time.time() - t0) * 1000, 2)
-                
-                # For TCP communication, any response indicates success
-                if response_bytes:
-                    # Create a truncated version for console (to prevent terminal flooding)
-                    console_response = response_text[:50] + "..." if len(response_text) > 50 else response_text
-                    
-                    # Successful response - show response preview in console
-                    print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Success | Response size: {len(response_bytes)} bytes | Content: {console_response}")
-                    
-                    # For CSV, include the full response content
-                    return [attempt_num, timestamp, "Success", elapsed, f"Size: {len(response_bytes)} bytes | Content: {response_text}"]
-                else:
+
+                if not raw:
                     print(f"[{attempt_num}/{self.num_tests}] Empty response")
-                    return [attempt_num, timestamp, "Empty Response", elapsed, "No data received"]
+                    return [attempt_num, timestamp, "Empty Response", elapsed, "No data received", 0]
+
+                # Separate headers/body
+                header_end = raw.find(b"\r\n\r\n")
+                if header_end == -1:
+                    # Not a valid HTTP response; still report bytes we saw
+                    preview = raw[:80].decode("utf-8", errors="ignore")
+                    print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Non-HTTP response")
+                    return [attempt_num, timestamp, "Error", elapsed, f"Non-HTTP response: {preview}", 0]
+
+                headers = raw[:header_end].decode("iso-8859-1", errors="ignore")
+                body = raw[header_end + 4 :]
+
+                # Parse status code
+                first_line = headers.split("\r\n", 1)[0]
+                try:
+                    parts = first_line.split()
+                    status_code = int(parts[1]) if len(parts) > 1 else 0
+                except Exception:
+                    status_code = 0
+
+                # Mirror your HTTP-test logic: capture/compare the BODY only
+                if status_code == 200 and self.reference_response is None:
+                    self.reference_response = body
+                    print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Success | Captured reference (size {len(body)} bytes)")
+                    return [
+                        attempt_num,
+                        timestamp,
+                        "Success",
+                        elapsed,
+                        f"HTTP {status_code} | Size: {len(body)} bytes | Reference captured",
+                        0,
+                    ]
+
+                if status_code == 200 and self.reference_response is not None:
+                    if len(body) != len(self.reference_response):
+                        mismatch = f"Size mismatch: got {len(body)} bytes, expected {len(self.reference_response)} bytes"
+                        print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Content Error | {mismatch}")
+                        return [attempt_num, timestamp, "Content Error", elapsed, f"HTTP {status_code} | {mismatch}", 0]
+
+                    mismatches = []
+                    for i, (c1, c2) in enumerate(zip(body, self.reference_response)):
+                        if c1 != c2:
+                            mismatches.append((i, c1, c2))
+                            if len(mismatches) >= 5:
+                                break
+
+                    if mismatches:
+                        mismatch_details = "; ".join(
+                            [
+                                f"Pos {pos}: {chr(c1) if c1 < 128 else hex(c1)} != {chr(c2) if c2 < 128 else hex(c2)}"
+                                for pos, c1, c2 in mismatches
+                            ]
+                        )
+                        print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Character Mismatch | {len(mismatches)} differences")
+                        return [
+                            attempt_num,
+                            timestamp,
+                            "Character Mismatch",
+                            elapsed,
+                            f"HTTP {status_code} | {len(mismatches)} character differences: {mismatch_details}",
+                            0,
+                        ]
+                    else:
+                        print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Success | Perfect character match")
+                        return [
+                            attempt_num,
+                            timestamp,
+                            "Success",
+                            elapsed,
+                            f"HTTP {status_code} | Size: {len(body)} bytes | Perfect character match",
+                            0,
+                        ]
+
+                # Non-200 response
+                print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Unexpected Response | HTTP {status_code}")
+                return [
+                    attempt_num,
+                    timestamp,
+                    "Unexpected Response",
+                    elapsed,
+                    f"HTTP {status_code} | Size: {len(body)} bytes",
+                    0,
+                ]
 
         except socket.timeout:
             elapsed = round((time.time() - t0) * 1000, 2)
             print(f"[{attempt_num}/{self.num_tests}] Timeout after {elapsed} ms")
-            return [attempt_num, timestamp, "Timeout", elapsed, "Connection timed out"]
-            
+            return [attempt_num, timestamp, "Timeout", elapsed, "Connection timed out", 0]
+
         except ConnectionRefusedError:
             elapsed = round((time.time() - t0) * 1000, 2)
             print(f"[{attempt_num}/{self.num_tests}] Connection refused after {elapsed} ms")
-            return [attempt_num, timestamp, "Error", elapsed, "Connection refused"]
-            
+            return [attempt_num, timestamp, "Error", elapsed, "Connection refused", 0]
+
         except Exception as err:
             elapsed = round((time.time() - t0) * 1000, 2)
             print(f"[{attempt_num}/{self.num_tests}] Error after {elapsed} ms: {err}")
-            return [attempt_num, timestamp, "Error", elapsed, str(err)]
+            return [attempt_num, timestamp, "Error", elapsed, str(err), 0]
+
         
     def _run_udp_test(self, attempt_num: int, t0: float, timestamp: str) -> List:
         """Send UDP data to router and analyze response (no automatic retransmission)"""
