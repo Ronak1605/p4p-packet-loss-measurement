@@ -1,10 +1,10 @@
 HTTP Test with Router Communication
 Start Time,2025-09-02 11:30:50
 End Time,2025-09-02 11:30:54
-Cable Type,lan_cat6_utp_weakened
+Cable Type,lan_cat6_https_weakened
 Position,metal_benchtop_taped
-Power State,60V
-Conduction Angle,120_deg
+Power State,no_power
+Conduction Angle,mc_off
 Router Address,192.168.0.1
 Protocol,HTTP
 Port,80
