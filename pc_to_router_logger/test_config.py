@@ -14,7 +14,7 @@ PROBE_GAIN_MV_PER_A = {
 }
 
 # === Folder and Filename Convention ===
-def get_next_test_filepath(base_name: str, root_folder: str = "results4"):
+def get_next_test_filepath(base_name: str, root_folder: str = "results5_wireshark"):
     test_folder = os.path.join(root_folder, communication_type, cable_type, antenna_position, power_state, conduction_angle)
     os.makedirs(test_folder, exist_ok=True)
 

@@ -99,9 +99,9 @@ class PacketLossTester:
         self.session.mount("https://", self._http_adapter)
 
         # Optional: turn on debug logs from urllib3 to see low-level retry messages
-        logging.basicConfig(level=logging.DEBUG)
+        """ logging.basicConfig(level=logging.DEBUG)
         logging.getLogger("urllib3").setLevel(logging.DEBUG)
-        logging.getLogger("urllib3.connectionpool").setLevel(logging.DEBUG)
+        logging.getLogger("urllib3.connectionpool").setLevel(logging.DEBUG) """
                 
     def run_test(self, delay_between_tests: float = 0) -> Dict[str, Any]:
         """Run the packet loss test and return results
@@ -270,10 +270,13 @@ class PacketLossTester:
         try:
             # Create HTTP request to router
             url = f"http://{self.router_address}"
-            # Note use of session, didn't use it before
-            response = self.session.get(url, timeout=self.timeout)
             
-            retry_count = getattr(response, "_retry_count", 0)
+            # Less robust request handler, causes more packet loss
+            response = requests.get(url, timeout=self.timeout)
+
+            # More robust request handler, causes less packet loss. Note use of session
+            # response = self.session.get(url, timeout=self.timeout)
+            # retry_count = getattr(response, "_retry_count", 0)
 
             
             # Calculate elapsed time
@@ -294,8 +297,10 @@ class PacketLossTester:
                 self.reference_response = content
                 print(f"[{attempt_num}/{self.num_tests}] Captured reference response, size: {len(content)} bytes")
                 # Include the actual response content in the CSV record
+                """ return [attempt_num, timestamp, "Success", elapsed, 
+                        f"HTTP {status_code} | Size: {len(content)} bytes | Reference captured | Retries: {retry_count} | Content: {content}"] """
                 return [attempt_num, timestamp, "Success", elapsed, 
-                        f"HTTP {status_code} | Size: {len(content)} bytes | Reference captured | Retries: {retry_count} | Content: {content}"]
+                        f"HTTP {status_code} | Size: {len(content)} bytes | Reference captured | Content: {content}"]
             
             # For subsequent requests, validate character by character against reference
             if status_code == 200 and self.reference_response is not None:
@@ -329,8 +334,11 @@ class PacketLossTester:
                     # Perfect match, character by character
                     print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | Success | Perfect match")
                     # Include the actual response content in the CSV record
+                    """ return [attempt_num, timestamp, "Success", elapsed, 
+                            f"HTTP {status_code} | Size: {len(content)} bytes | Perfect character match |  Retries: {retry_count} | Content: {content}"] """
                     return [attempt_num, timestamp, "Success", elapsed, 
-                            f"HTTP {status_code} | Size: {len(content)} bytes | Perfect character match |  Retries: {retry_count} | Content: {content}"]
+                            f"HTTP {status_code} | Size: {len(content)} bytes | Perfect character match | Content: {content}"]
+                        
             else:
                 # Either no reference response yet or non-200 status code
                 content_size = len(content) if content else 0
@@ -341,21 +349,25 @@ class PacketLossTester:
                 
         except requests.exceptions.Timeout:
             elapsed = round((time.time() - t0) * 1000, 2)
-            retries_attempted = self._http_adapter.retry_counter.get("count", 0)
+            # retries_attempted = self._http_adapter.retry_counter.get("count", 0)
             print(f"[{attempt_num}/{self.num_tests}] HTTP Timeout after {elapsed} ms")
-            return [attempt_num, timestamp, "Timeout", elapsed, "HTTP request timed out | Retries attempted:", retries_attempted]
+            # return [attempt_num, timestamp, "Timeout", elapsed, "HTTP request timed out | Retries attempted:", retries_attempted]
+            return [attempt_num, timestamp, "Timeout", elapsed, "HTTP request timed out"]
             
+
         except requests.exceptions.ConnectionError:
             elapsed = round((time.time() - t0) * 1000, 2)
-            retries_attempted = self._http_adapter.retry_counter.get("count", 0)
+            # retries_attempted = self._http_adapter.retry_counter.get("count", 0)
             print(f"[{attempt_num}/{self.num_tests}] Connection error after {elapsed} ms")
-            return [attempt_num, timestamp, "Error", elapsed, "Connection error | Retries attempted:", retries_attempted]
+            # return [attempt_num, timestamp, "Error", elapsed, "Connection error | Retries attempted:", retries_attempted]
+            return [attempt_num, timestamp, "Error", elapsed, "Connection error"]
             
         except Exception as err:
             elapsed = round((time.time() - t0) * 1000, 2)
-            retries_attempted = self._http_adapter.retry_counter.get("count", 0)
+            # retries_attempted = self._http_adapter.retry_counter.get("count", 0)
             print(f"[{attempt_num}/{self.num_tests}] Error after {elapsed} ms: {err}")
-            return [attempt_num, timestamp, "Error", elapsed, str(err), "Retries attempted:", {retries_attempted} ]
+            # return [attempt_num, timestamp, "Error", elapsed, str(err), "Retries attempted:", {retries_attempted} ]
+            return [attempt_num, timestamp, "Error", elapsed, str(err)]
     
     def _run_tcp_test(self, attempt_num: int, t0: float, timestamp: str) -> List:
         """Send a raw-socket HTTP GET (same as HTTP test) and analyze response."""
@@ -373,7 +385,7 @@ class PacketLossTester:
                     f"Accept-Encoding: identity\r\n"
                     f"Connection: close\r\n"
                     f"\r\n"
-                ).encode("ascii", errors="ignore")
+                ).encode("ascii")
 
                 sock.sendall(req)
 
