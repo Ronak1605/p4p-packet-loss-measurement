@@ -24,6 +24,9 @@ class PacketLossTester:
         """
         print(f"Starting {self.connection_type} test with {self.num_tests} attempts")
         
+        # Pause once before all tests
+        # self.scope.write(":STOP")
+        
         start_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         test_start = time.time()
         
@@ -37,6 +40,8 @@ class PacketLossTester:
                 
             time.sleep(delay_between_tests)
         
+        # Resume after all tests
+        # self.scope.write(":RUN")
         test_end = time.time()
         
         return self._calculate_summary_stats(start_time_str, test_start, test_end)
@@ -50,7 +55,7 @@ class PacketLossTester:
             # Get waveform data instead of checking identification
             self.scope.write(":WAVeform:SOURce CHANnel1")
             self.scope.write(":WAVeform:FORMat BYTE")
-            self.scope.write(":WAVeform:POINts 1000")
+            self.scope.write(":WAVeform:POINts 2050")
             waveform_data = self.scope.query_binary_values(":WAVeform:DATA?", datatype='B')
             
             elapsed = round((time.time() - t0) * 1000, 2)
