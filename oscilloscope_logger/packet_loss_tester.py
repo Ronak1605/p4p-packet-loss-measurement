@@ -1,5 +1,6 @@
 import time
 import csv
+import numpy as np
 from statistics import mean, median
 from datetime import datetime
 from typing import List, Tuple, Optional, Dict, Any
@@ -13,7 +14,6 @@ class PacketLossTester:
         self.results = []
         self.response_times = []
         self.success_count = 0
-        self.expected_response = "KEYSIGHT TECHNOLOGIES,DSO-X 3024T,MY58493325,07.20.2017102614"
         
     def run_test(self, delay_between_tests: float = 0) -> Dict[str, Any]:
         """Run the packet loss test and return results
@@ -47,27 +47,36 @@ class PacketLossTester:
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
         
         try:
-            # Send identification query
-            response = self.scope.query('*IDN?').strip()
+            # Get waveform data instead of checking identification
+            self.scope.write(":WAVeform:SOURce CHANnel1")
+            self.scope.write(":WAVeform:FORMat BYTE")
+            self.scope.write(":WAVeform:POINts 1000")
+            waveform_data = self.scope.query_binary_values(":WAVeform:DATA?", datatype='B')
+            
             elapsed = round((time.time() - t0) * 1000, 2)
             
-            if response == self.expected_response:
+            if waveform_data and len(waveform_data) > 0:
                 # Get measurements
                 v_rms = self.scope.query(":MEASure:VRMS? CHAN1").strip()
                 acrms_ch2 = self.scope.query(":MEASure:ACRMS? CHAN2").strip()
                 acrms_ch3 = self.scope.query(":MEASure:ACRMS? CHAN3").strip()
                 
-                print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | VRMS CH1: {v_rms} V | CH2: {acrms_ch2} A | CH3: {acrms_ch3} A")
+                # Calculate some basic stats about the waveform
+                waveform_min = min(waveform_data)
+                waveform_max = max(waveform_data)
+                waveform_avg = round(sum(waveform_data) / len(waveform_data), 2)
                 
-                return [attempt_num, timestamp, "Success", elapsed, response, v_rms, acrms_ch2, acrms_ch3]
+                print(f"[{attempt_num}/{self.num_tests}] {elapsed} ms | VRMS CH1: {v_rms} V | CH2: {acrms_ch2} A | CH3: {acrms_ch3} A | Waveform points: {len(waveform_data)}")
+                
+                return [attempt_num, timestamp, "Success", elapsed, f"Data points: {len(waveform_data)}", v_rms, acrms_ch2, acrms_ch3, waveform_min, waveform_max, waveform_avg]
             else:
-                print(f"[{attempt_num}/{self.num_tests}] Unexpected response: {response}")
-                return [attempt_num, timestamp, "Unexpected Response", elapsed, response, "", "", ""]
+                print(f"[{attempt_num}/{self.num_tests}] No waveform data received")
+                return [attempt_num, timestamp, "No Data", elapsed, "No waveform data", "", "", "", "", "", ""]
                 
         except Exception as err:
             elapsed = round((time.time() - t0) * 1000, 2)
             print(f"[{attempt_num}/{self.num_tests}] Timeout/Error after {elapsed} ms: {err}")
-            return [attempt_num, timestamp, "Timeout/Error", elapsed, str(err), "", "", ""]
+            return [attempt_num, timestamp, "Timeout/Error", elapsed, str(err), "", "", "", "", "", ""]
     
     def _calculate_summary_stats(self, start_time_str: str, test_start: float, test_end: float) -> Dict[str, Any]:
         """Calculate summary statistics"""
@@ -128,7 +137,8 @@ class PacketLossTester:
             # Write data headers and results
             writer.writerow([
                 "Attempt", "Timestamp", "Status", "Response Time (ms)", "Response",
-                "V RMS CH1 (V)", "AC RMS CH2 (A)", "AC RMS CH3 (A)"
+                "V RMS CH1 (V)", "AC RMS CH2 (A)", "AC RMS CH3 (A)", 
+                "Waveform Min", "Waveform Max", "Waveform Avg"
             ])
             writer.writerows(self.results)
     
