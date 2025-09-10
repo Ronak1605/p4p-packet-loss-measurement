@@ -1,7 +1,7 @@
 import os
 
 # === Configurable Test Info (CHANGE FOR EACH TEST) ===
-cable_type = 'lan_cat6_unshielded_stripped_unpaused'
+cable_type = 'lan_cat6_unshielded_stripped_paused_channel2'
 position = 'antenna_tuning_inverter_gap'
 power_state = '60V'
 conduction_angle = '120_deg'
