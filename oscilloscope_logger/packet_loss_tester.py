@@ -25,7 +25,7 @@ class PacketLossTester:
         print(f"Starting {self.connection_type} test with {self.num_tests} attempts")
         
         # Pause once before all tests
-        self.scope.write(":STOP")
+        # self.scope.write(":STOP")
         
         start_time_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         test_start = time.time()
@@ -41,7 +41,7 @@ class PacketLossTester:
             time.sleep(delay_between_tests)
         
         # Resume after all tests
-        self.scope.write(":RUN")
+        # self.scope.write(":RUN")
         test_end = time.time()
         
         return self._calculate_summary_stats(start_time_str, test_start, test_end)
