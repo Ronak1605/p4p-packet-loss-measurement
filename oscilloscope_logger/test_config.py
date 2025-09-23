@@ -1,10 +1,10 @@
 import os
 
 # === Configurable Test Info (CHANGE FOR EACH TEST) ===
-cable_type = 'lan_cat6_unshielded_stripped_unpaused_channel2'
-position = 'antenna_tuning_inverter_gap'
-power_state = '300V'
-conduction_angle = '120_deg'
+cable_type = 'wireless_WiFi_Test'
+position = 'NA'
+power_state = 'base'
+conduction_angle = 'mc_off'
 
 # === Probe sensitivity in mV/A ===
 PROBE_GAIN_MV_PER_A = {
@@ -13,7 +13,7 @@ PROBE_GAIN_MV_PER_A = {
 }
 
 # === Folder and Filename Convention ===
-def get_next_test_filepath(base_name: str, root_folder: str = "results_7"):
+def get_next_test_filepath(base_name: str, root_folder: str = "results_pi_test"):
     test_folder = os.path.join(root_folder, cable_type, position, power_state, conduction_angle)
     os.makedirs(test_folder, exist_ok=True)
 

@@ -75,14 +75,14 @@ You can run oscilloscope tests by connecting the oscilloscope to a Raspberry Pi 
     pip install -r requirements.txt
     ```
 
-7. **Run the TCP server on the Pi (using `sudo`):**
+7. **Run the TCP server on the Pi (using `sudo` and the full venv Python path):**
     ```sh
     cd oscilloscope_logger
-    source ../venv/bin/activate  # if not already activated
-    sudo ../venv/bin/python3 oscilloscope_tcp_server.py
+    sudo /home/p4p-140/Downloads/p4p-repos/p4p-packet-loss-measurement/venv/bin/python3 oscilloscope_tcp_server.py
     ```
     - The server will wait for a connection from your PC and send each test result as it is collected.
     - `sudo` is required to access the USB oscilloscope device.
+    - **Note:** You must use the full path to the Python executable inside your virtual environment when running with `sudo`, or the server will not see your installed dependencies.
 
 8. **On your PC (connected to the same WiFi network), update the Pi IP in the client script and run the TCP client:**
     - Open `oscilloscope_logger/oscilloscope_tcp_client.py` and set the `PI_IP` variable to your Pi’s IP address (e.g., `192.168.0.50` for the lab Pi):
@@ -95,7 +95,6 @@ You can run oscilloscope tests by connecting the oscilloscope to a Raspberry Pi 
       python3 oscilloscope_tcp_client.py
       ```
     - The client will connect to the Pi and save results as a CSV file.
-
 
 9. **Results will be saved as a CSV file in the appropriate results folder, with the same format as the USB logger.**
 
