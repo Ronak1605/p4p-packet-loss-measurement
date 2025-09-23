@@ -32,3 +32,83 @@ Communicate to the router via a wired LAN connection.
 1. Navigate to `pc_to_router_logger` in your code space
 2. Find the IP of the router on your PC
 3. Run ```python router_test.py <router ip>``` or ```python router_test.py <router ip>``` e.g. ```python3 router_test.py 192.168.0.1```, this will start the packet loss detection.
+
+### Oscilloscope Communication via Raspberry Pi (WiFi TCP Mode)
+
+You can run oscilloscope tests by connecting the oscilloscope to a Raspberry Pi via USB, and then retrieving results from your PC over the **same WiFi network**.
+
+#### **Setup Steps**
+
+1. **Connect the Oscilloscope to the Raspberry Pi via USB.**
+
+2. **Power on the Pi and connect it to your WiFi network.**
+
+3. **Find the Pi’s IP address:**
+    - If you have a monitor/keyboard attached, run:
+      ```sh
+      hostname -I
+      ```
+      or
+      ```sh
+      ip addr show wlan0
+      ```
+    - If you do not have a monitor, you can check your router’s admin page for a device named `raspberrypi` or similar.
+    - If your Pi is set to a static IP, use that.  
+      **For the TP-Link in the lab, the static IP is `192.168.0.50`.**
+
+4. **(Optional) Set a static IP:**  
+   You can configure a static IP for your Pi by editing `/etc/dhcpcd.conf` and adding:
+   ```
+   interface wlan0
+   static ip_address=192.168.0.50/24
+   static routers=192.168.0.1
+   static domain_name_servers=8.8.8.8 8.8.4.4
+   ```
+   Then reboot the Pi.
+
+5. **SSH into the Pi from your PC (replace `<pi-ip>` with your Pi’s IP address):**
+    ```sh
+    ssh <your-username>@<pi-ip>
+    ```
+    Example for the lab Pi:
+    ```sh
+    ssh p4p-140@192.168.0.50
+    ```
+
+6. **Install dependencies on the Pi (using a Python virtual environment is recommended):**
+    ```sh
+    python3 -m venv venv
+    source venv/bin/activate
+    pip install -r requirements.txt
+    ```
+
+7. **Run the TCP server on the Pi:**
+    ```sh
+    cd oscilloscope_logger
+    source ../venv/bin/activate  # if not already activated
+    python3 oscilloscope_tcp_server.py
+    ```
+    - The server will wait for a connection from your PC and send each test result as it is collected.
+
+8. **On your PC (connected to the same WiFi network), run the TCP client to collect and save results:**
+    ```sh
+    cd oscilloscope_logger
+    python3 oscilloscope_tcp_client.py
+    ```
+    - By default, the client connects to `raspberrypi.local`. If needed, edit `PI_IP` in `oscilloscope_tcp_client.py` to match your Pi’s hostname or IP address (e.g., `192.168.0.50` for the lab Pi).
+
+9. **Results will be saved as a CSV file in the appropriate results folder, with the same format as the USB logger.**
+
+#### **Notes**
+- The Pi and PC must be on the same WiFi network.
+- You can run the Pi headless (no monitor/keyboard) and control it via SSH.
+- To auto-start the server on boot, add a script to your crontab or create a systemd service.
+- All test configuration (number of tests, cable type, etc.) is set in `oscilloscope_logger/test_config.py`.
+
+#### **Troubleshooting**
+- Ensure the oscilloscope is powered on and visible to the Pi (`lsusb` or `pyvisa` resource list).
+- If you have connection issues, check your firewall and network settings.
+- For SSH access, use your Pi’s username (e.g., `ssh p4p-140@192.168.0.50`).
+
+---
+
