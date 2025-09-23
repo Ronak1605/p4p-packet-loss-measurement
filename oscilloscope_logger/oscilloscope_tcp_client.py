@@ -6,7 +6,7 @@ import test_config
 num_tests = 100
 base_name = "usb_tcp_test_results"
 full_path = test_config.get_next_test_filepath(base_name)
-PI_IP = 'raspberrypi.local'  # Or use the Pi's IP address
+PI_IP = '172.23.14.13'  # Replace Raspberry Pi's IP address as necessary
 PORT = 5005
 
 CSV_HEADER = [
