@@ -57,14 +57,7 @@ You can run oscilloscope tests by connecting the oscilloscope to a Raspberry Pi 
       **For the TP-Link in the lab, the static IP is `192.168.0.50`.**
 
 4. **(Optional) Set a static IP:**  
-   You can configure a static IP for your Pi by editing `/etc/dhcpcd.conf` and adding:
-   ```
-   interface wlan0
-   static ip_address=192.168.0.50/24
-   static routers=192.168.0.1
-   static domain_name_servers=8.8.8.8 8.8.4.4
-   ```
-   Then reboot the Pi.
+   You can configure a static IP for your Pi by using the network manager on the Pi
 
 5. **SSH into the Pi from your PC (replace `<pi-ip>` with your Pi’s IP address):**
     ```sh
