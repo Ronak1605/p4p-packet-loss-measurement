@@ -2,9 +2,9 @@ import os
 
 # === Configurable Test Info (CHANGE FOR EACH TEST) ===
 cable_type = 'wireless_WiFi_Test'
-position = 'NA'
-power_state = 'base'
-conduction_angle = 'mc_off'
+position = 'inverter_lcl_gap'
+power_state = '60V'
+conduction_angle = '120_deg'
 
 # === Probe sensitivity in mV/A ===
 PROBE_GAIN_MV_PER_A = {
