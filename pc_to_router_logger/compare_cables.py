@@ -164,8 +164,8 @@ def visualize_cable_comparison(combined_df, modified_files, unmodified_files, ou
     stats_df.to_csv(os.path.join(output_dir, 'cable_modification_comparison_stats.csv'), index=False)
     
     # Define consistent colors for cable types (use more subtle colors as in data_visualiser)
-    modified_color = 'royalblue'
-    unmodified_color = 'tomato'
+    modified_color = 'blue'
+    unmodified_color = 'red'
     
     # Get sample size for title
     sample_size = modified_df['num_samples'].mean()
@@ -227,7 +227,7 @@ def visualize_cable_comparison(combined_df, modified_files, unmodified_files, ou
     
     # Create single-metric bar chart
     bars = ax.bar(cable_types, means, color=[modified_color, unmodified_color], 
-                 alpha=0.7, yerr=stds, capsize=5)
+                 alpha=0.7, capsize=5)
     
     # Add value labels on top of bars
     for bar in bars:
@@ -259,7 +259,7 @@ def visualize_cable_comparison(combined_df, modified_files, unmodified_files, ou
     
     bars = ax.bar(['Modified Cable', 'Unmodified Cable'], success_means, 
                    color=[modified_color, unmodified_color], alpha=0.7,
-                   yerr=success_stds, capsize=5)
+                   capsize=5)
     
     # Add value labels on top of bars
     for bar in bars:

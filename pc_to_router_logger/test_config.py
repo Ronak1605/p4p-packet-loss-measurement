@@ -1,11 +1,11 @@
 import os
 
 # === Configurable Test Info (CHANGE FOR EACH TEST) ===
-communication_type = 'http_keysight'
-cable_type = 'lan_cat6_https_weakened'
-antenna_position = 'metal_benchtop_taped'
-power_state = '100V'
-conduction_angle = '120_deg'
+communication_type = 'http_router_wireless'
+cable_type = 'NA'
+antenna_position = 'NA'
+power_state = '60V'
+conduction_angle = 'wireless'
 
 # === Probe sensitivity in mV/A ===
 PROBE_GAIN_MV_PER_A = {
@@ -14,7 +14,7 @@ PROBE_GAIN_MV_PER_A = {
 }
 
 # === Folder and Filename Convention ===
-def get_next_test_filepath(base_name: str, root_folder: str = "results6_wireshark"):
+def get_next_test_filepath(base_name: str, root_folder: str = "results_wireless"):
     test_folder = os.path.join(root_folder, communication_type, cable_type, antenna_position, power_state, conduction_angle)
     os.makedirs(test_folder, exist_ok=True)
 
