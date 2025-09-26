@@ -1,11 +1,11 @@
 import os
 
 # === Configurable Test Info (CHANGE FOR EACH TEST) ===
-communication_type = 'http_router_wireless'
-cable_type = 'NA'
-antenna_position = 'NA'
+communication_type = 'http_router'
+cable_type = 'stp_shielded_green'
+antenna_position = 'loop_gap'
 power_state = '60V'
-conduction_angle = 'wireless'
+conduction_angle = '120_deg'
 
 # === Probe sensitivity in mV/A ===
 PROBE_GAIN_MV_PER_A = {
