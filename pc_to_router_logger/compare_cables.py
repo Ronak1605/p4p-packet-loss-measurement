@@ -6,6 +6,7 @@ import csv
 import glob
 from pathlib import Path
 import re
+import datetime
 
 def get_csv_files(directory_path, exclude_pattern=None):
     """Get all CSV files in a directory."""
@@ -420,13 +421,108 @@ def visualize_cable_comparison(combined_df, modified_files, unmodified_files, ou
     
     return stats_df
 
+def compare_all_cable_types(wifi_files, utp_files, stp_files, weakened_utp_files, output_dir_base="cable_type_comparison"):
+    # Create a unique output directory for each run
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_dir = os.path.join(output_dir_base + "_" + timestamp)
+    os.makedirs(output_dir, exist_ok=True)
+
+    cable_types = [
+        ("WiFi", wifi_files, "purple"),
+        ("UTP", utp_files, "red"),
+        ("STP", stp_files, "blue"),
+        ("Weakened UTP", weakened_utp_files, "orange"),
+    ]
+    metrics = []
+    for label, files, color in cable_types:
+        for file in files:
+            m = extract_test_metrics(file)
+            if m:
+                m['cable_type'] = label
+                m['color'] = color
+                metrics.append(m)
+    df = pd.DataFrame(metrics)
+
+    # Boxplot for mean response time
+    plt.style.use('seaborn-v0_8')
+    plt.figure(figsize=(12, 8))
+    box_data = [df[df['cable_type'] == label]['mean_time'] for label, _, _ in cable_types]
+    box = plt.boxplot(box_data, tick_labels=[label for label, _, _ in cable_types], patch_artist=True)  # <-- use tick_labels
+
+    # Set box colors
+    for patch, (_, _, color) in zip(box['boxes'], cable_types):
+        patch.set_facecolor(color)
+
+    plt.ylabel("Mean Response Time (s)")
+    plt.title("Mean Response Time Comparison (All Cable Types)")
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, "mean_response_time_boxplot.png"), dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Bar chart for mean response time
+    means = [df[df['cable_type'] == label]['mean_time'].mean() for label, _, _ in cable_types]
+    stds = [df[df['cable_type'] == label]['mean_time'].std() for label, _, _ in cable_types]
+    plt.figure(figsize=(12, 8))
+    bars = plt.bar([label for label, _, _ in cable_types], means, yerr=stds, color=[color for _, _, color in cable_types], alpha=0.7, capsize=5)
+    plt.ylabel("Mean Response Time (s)")
+    plt.title("Mean Response Time (Mean ± Std) by Cable Type")
+    plt.grid(True, alpha=0.3)
+    for bar in bars:
+        height = bar.get_height()
+        plt.annotate(f'{height:.4f}s', xy=(bar.get_x() + bar.get_width() / 2, height), xytext=(0, 3), textcoords="offset points", ha='center', va='bottom', fontsize=10, fontweight='bold')
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, "mean_response_time_bar.png"), dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # --- Bar chart for success rate ---
+    success_means = [df[df['cable_type'] == label]['success_rate'].mean() for label, _, _ in cable_types]
+    success_stds = [df[df['cable_type'] == label]['success_rate'].std() for label, _, _ in cable_types]
+    plt.figure(figsize=(12, 8))
+    bars = plt.bar(
+        [label for label, _, _ in cable_types],
+        success_means,
+        yerr=success_stds,
+        color=[color for _, _, color in cable_types],
+        alpha=0.7,
+        capsize=5
+    )
+    plt.ylabel("Success Rate (%)", fontsize=22)
+    plt.title("Packet Success Rate across 300 Tests by Communication Type at 60V and 120° Conduction Angle", fontsize=24)
+    plt.ylim(0, 105)
+    plt.grid(True, alpha=0.3)
+    plt.xticks(fontsize=20)
+    plt.yticks(fontsize=20)
+    for bar in bars:
+        height = bar.get_height()
+        plt.annotate(
+            f'{height:.2f}%',
+            xy=(bar.get_x() + bar.get_width() / 2, height),
+            xytext=(0, 8),
+            textcoords="offset points",
+            ha='center',
+            va='bottom',
+            fontsize=18,
+            fontweight='bold'
+        )
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, "success_rate_bar.png"), dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Save summary
+    df.to_csv(os.path.join(output_dir, "all_cable_types_summary.csv"), index=False)
+    print(f"Plots and summary saved to {output_dir}")
+
+
 if __name__ == "__main__":
-    # Base path
     base_path = os.path.join(Path(__file__).parent)
-    
-    # Paths for modified and unmodified cable tests
-    modified_path = os.path.join(base_path, "results2", "tcp", "lan_cat6_utp", "metal_benchtop_taped", "60V", "120_deg")
-    unmodified_path = os.path.join(base_path, "results3", "http", "lan_cat6_utp_normal", "metal_benchtop_taped", "60V", "120_deg")
-    
-    # Compare cables
-    compare_cable_modifications(base_path, modified_path, unmodified_path)
+    # WiFi
+    wifi_files = get_csv_files(os.path.join(base_path, "results_wireless", "http_router_wireless", "NA", "NA", "60V", "wireless"))
+    # UTP
+    utp_files = get_csv_files(os.path.join(base_path, "results_wireless", "http_router", "utp_unshielded_blue", "loop_gap", "60V", "120_deg"))
+    # STP
+    stp_files = get_csv_files(os.path.join(base_path, "results_wireless", "http_router", "stp_shielded_green", "loop_gap", "60V", "120_deg"))
+    # Weakened UTP
+    weakened_utp_files = get_csv_files(os.path.join(base_path, "results2", "tcp2", "lan_cat6_utp", "metal_benchtop_taped", "60V", "120_deg"))
+
+    compare_all_cable_types(wifi_files, utp_files, stp_files, weakened_utp_files)

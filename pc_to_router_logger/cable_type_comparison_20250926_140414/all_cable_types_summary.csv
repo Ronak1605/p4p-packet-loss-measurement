@@ -1,0 +1,13 @@
+test_name,total_time,mean_time,success_rate,num_samples,cable_type,color
+router_http_test_http_router_wireless_NA_NA_60V_wireless_test_0003,3.29,0.03198,100.0,100,WiFi,purple
+router_http_test_http_router_wireless_NA_NA_60V_wireless_test_0002,5.62,0.055299999999999995,100.0,100,WiFi,purple
+router_http_test_http_router_wireless_NA_NA_60V_wireless_test_0001,3.33,0.03225,100.0,100,WiFi,purple
+router_http_test_http_router_utp_unshielded_blue_loop_gap_60V_120_deg_test_0002,3.03,0.02917,100.0,100,UTP,red
+router_http_test_http_router_utp_unshielded_blue_loop_gap_60V_120_deg_test_0003,3.22,0.030719999999999997,100.0,100,UTP,red
+router_http_test_http_router_utp_unshielded_blue_loop_gap_60V_120_deg_test_0001,3.38,0.032189999999999996,100.0,100,UTP,red
+router_http_test_http_router_stp_shielded_green_loop_gap_60V_120_deg_test_0001,3.11,0.030109999999999998,100.0,100,STP,blue
+router_http_test_http_router_stp_shielded_green_loop_gap_60V_120_deg_test_0003,3.1,0.02989,100.0,100,STP,blue
+router_http_test_http_router_stp_shielded_green_loop_gap_60V_120_deg_test_0002,3.08,0.02949,100.0,100,STP,blue
+router_http_test_tcp2_lan_cat6_utp_metal_benchtop_taped_60V_120_deg_test_0001,64.04,0.50154,91.0,100,Weakened UTP,orange
+router_http_test_tcp2_lan_cat6_utp_metal_benchtop_taped_60V_120_deg_test_0003,51.27,0.36125999999999997,91.0,100,Weakened UTP,orange
+router_http_test_tcp2_lan_cat6_utp_metal_benchtop_taped_60V_120_deg_test_0002,55.88,0.39417,90.0,100,Weakened UTP,orange
