@@ -23,7 +23,7 @@ def compare_latency_across_types(files_dict, output_dir="oscilloscope_latency_co
         plt.plot(range(1, len(latency)+1), latency, label=label, color=color, marker='o', markersize=5, linewidth=2, alpha=0.85)
     plt.xlabel("Packet Attempt", fontsize=20)
     plt.ylabel("Latency (ms)", fontsize=20)
-    plt.title("Packet Response Times for 100 Tests with Oscilloscope at 60V with 120° Conduction Angle", fontsize=22)
+    plt.title("Packet Response Times for 100 Tests with Oscilloscope at 60V with 120° Conduction Angle", fontsize=20)
     plt.legend(fontsize=18)
     plt.grid(True, alpha=0.3)
     plt.xticks(fontsize=18)
