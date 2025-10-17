@@ -8,3 +8,4 @@ seaborn
 numpy
 requests
 aiohttp
+serial
