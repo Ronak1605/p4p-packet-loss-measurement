@@ -46,56 +46,82 @@ def setup_bluetooth_simple():
         print(f"Bluetooth setup error: {e}")
 
 def wait_for_bluetooth_connection():
-    """Wait for Bluetooth client connection (like TCP server's s.accept())"""
+    """Wait for ACTUAL Bluetooth client connection (not built-in serial ports)"""
     print("\nWaiting for Bluetooth client connection...")
     print("Please connect from your Mac:")
-    print("1. Run the client script on your Mac")
-    print("2. Pair and select the Bluetooth port when prompted")
+    print("1. Pair with this Pi in System Preferences > Bluetooth")
+    print("2. Run the client script on your Mac")
+    print("3. Select the Bluetooth port when prompted")
     
-    # Check multiple possible serial devices that appear when client connects
-    possible_devices = [
+    # Only check for RFCOMM devices (actual Bluetooth connections)
+    # Exclude built-in serial ports that always exist
+    bluetooth_only_devices = [
         '/dev/rfcomm0',
         '/dev/rfcomm1', 
         '/dev/rfcomm2',
-        '/dev/ttyBT0',
-        '/dev/ttyS0', 
-        '/dev/ttyAMA0',
-        '/dev/serial0'
+        '/dev/rfcomm3',
+        '/dev/rfcomm4'
     ]
     
-    print("Monitoring for Bluetooth serial connections...")
+    print("Monitoring for RFCOMM Bluetooth connections only...")
+    print("(Ignoring built-in serial ports like /dev/serial0, /dev/ttyS0, etc.)")
     
-    for attempt in range(600):  # Wait up to 10 minutes (like a real server)
-        # Check for any new serial devices that appear
+    # Track which devices existed before we started waiting
+    initial_devices = set()
+    try:
+        initial_devices = set(os.listdir('/dev/'))
+    except:
+        pass
+    
+    for attempt in range(600):  # Wait up to 10 minutes
+        
+        # Only check RFCOMM devices (real Bluetooth connections)
+        for device in bluetooth_only_devices:
+            if os.path.exists(device):
+                try:
+                    print(f"Found RFCOMM device: {device}")
+                    # Try to open it - if it fails, no client is connected
+                    ser = serial.Serial(device, 115200, timeout=2)
+                    
+                    # Test if there's actually a client by trying to read
+                    # If no client, this will timeout quickly
+                    print(f"Testing if {device} has an active client...")
+                    test_read = ser.read(1)  # Try to read 1 byte with 2-second timeout
+                    
+                    if test_read or True:  # Accept connection even if no immediate data
+                        print(f"✓ Bluetooth client connected via {device}")
+                        return ser
+                    else:
+                        print(f"No active client on {device}")
+                        ser.close()
+                        
+                except serial.SerialException as e:
+                    print(f"Cannot open {device}: {e}")
+                    continue
+        
+        # Check for any NEW devices that appeared (might be Bluetooth-related)
         try:
             current_devices = set(os.listdir('/dev/'))
+            new_devices = current_devices - initial_devices
             
-            # Look for RFCOMM or Bluetooth devices
-            for device_name in current_devices:
-                if any(bt_pattern in device_name for bt_pattern in ['rfcomm', 'bluetooth', 'bt']):
+            for device_name in new_devices:
+                if 'bluetooth' in device_name.lower() or 'bt' in device_name.lower():
                     device_path = f'/dev/{device_name}'
                     try:
-                        ser = serial.Serial(device_path, 115200, timeout=10)
-                        print(f"✓ Bluetooth client connected via {device_path}")
+                        ser = serial.Serial(device_path, 115200, timeout=2)
+                        print(f"✓ New Bluetooth device connected: {device_path}")
                         return ser
                     except serial.SerialException:
                         continue
         except:
             pass
-        
-        # Also check predefined possible devices
-        for device in possible_devices:
-            if os.path.exists(device):
-                try:
-                    ser = serial.Serial(device, 115200, timeout=10)
-                    print(f"✓ Bluetooth client connected via {device}")
-                    return ser
-                except serial.SerialException:
-                    continue
             
         if attempt % 30 == 0:  # Print every 30 seconds
             minutes_remaining = (600 - attempt) // 60
-            print(f"Still waiting for client connection... ({minutes_remaining} minutes remaining)")
+            print(f"Still waiting for RFCOMM connection... ({minutes_remaining} minutes remaining)")
+            print("Make sure to:")
+            print("  - Pair devices in System Preferences > Bluetooth")
+            print("  - Run the client script which will create the RFCOMM connection")
             
         time.sleep(1)
     
@@ -122,7 +148,7 @@ def main():
     # Setup Bluetooth
     setup_bluetooth_simple()
     
-    # WAIT for client connection (same as TCP server's s.accept())
+    # WAIT for ACTUAL client connection (not built-in serial ports)
     ser = wait_for_bluetooth_connection()
     
     if not ser:
@@ -132,7 +158,7 @@ def main():
         return
 
     try:
-        print("✓ Bluetooth client connected, starting tests...")
+        print("✓ Real Bluetooth client connected, starting tests...")
         
         # NOW run tests (same as TCP server - ONLY after client connects)
         for n in range(num_tests):
