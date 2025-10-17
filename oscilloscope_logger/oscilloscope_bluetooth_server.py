@@ -45,13 +45,13 @@ def setup_bluetooth_simple():
     except Exception as e:
         print(f"Bluetooth setup error: {e}")
         
-def wait_for_serial_connection():
-    """Wait for any serial connection that might be created by pairing"""
-    print("\nWaiting for Bluetooth serial connection...")
+def wait_for_bluetooth_connection():
+    """Wait for Bluetooth client connection (like TCP server waits)"""
+    print("\nWaiting for Bluetooth client connection...")
     print("Please pair and connect from your Mac now:")
     print("1. Go to System Preferences > Bluetooth")
     print("2. Find and pair with this Pi")
-    print("3. After pairing, try to connect")
+    print("3. Run the client script on your Mac")
     
     # Check multiple possible serial devices
     possible_devices = [
@@ -61,13 +61,13 @@ def wait_for_serial_connection():
         '/dev/serial0'
     ]
     
-    for attempt in range(120):  # Wait up to 2 minutes
+    for attempt in range(300):  # Wait up to 5 minutes (like TCP server)
         # Check for RFCOMM devices
         for device in possible_devices:
             if os.path.exists(device):
                 try:
                     ser = serial.Serial(device, 115200, timeout=10)
-                    print(f"✓ Connected via {device}")
+                    print(f"✓ Bluetooth client connected via {device}")
                     return ser
                 except serial.SerialException:
                     continue
@@ -80,15 +80,16 @@ def wait_for_serial_connection():
                 device_path = f'/dev/{device}'
                 try:
                     ser = serial.Serial(device_path, 115200, timeout=10)
-                    print(f"✓ Connected via {device_path}")
+                    print(f"✓ Bluetooth client connected via {device_path}")
                     return ser
                 except serial.SerialException:
                     continue
         except:
             pass
             
-        if attempt % 10 == 0:
-            print(f"Still waiting... ({120-attempt}s remaining)")
+        if attempt % 30 == 0:  # Print every 30 seconds
+            minutes_remaining = (300 - attempt) // 60
+            print(f"Still waiting for client connection... ({minutes_remaining} minutes remaining)")
         time.sleep(1)
     
     return None
@@ -96,10 +97,8 @@ def wait_for_serial_connection():
 def main():
     print("=== Bluetooth Server (Pi) ===")
     
-    # Setup Bluetooth
-    setup_bluetooth_simple()
-    
-    # Connect to oscilloscope
+    # Setup instruments first (like TCP server)
+    print("Connecting to oscilloscope...")
     try:
         rm = pyvisa.ResourceManager()
         scope = rm.open_resource(scope_usb_address)
@@ -112,11 +111,14 @@ def main():
 
     tester = PacketLossTester(scope, "USB", num_tests)
 
-    # Wait for Bluetooth connection
-    ser = wait_for_serial_connection()
+    # Setup Bluetooth
+    setup_bluetooth_simple()
+    
+    # Wait for client connection (like TCP server does with s.accept())
+    ser = wait_for_bluetooth_connection()
     
     if not ser:
-        print("❌ No Bluetooth connection established")
+        print("❌ No Bluetooth client connection established")
         scope.close()
         rm.close()
         return
@@ -124,7 +126,7 @@ def main():
     try:
         print("✓ Bluetooth client connected, starting tests...")
         
-        # Send tests exactly like TCP server
+        # NOW run tests (same as TCP server - only after client connects)
         for n in range(num_tests):
             print(f"Running test {n+1}/{num_tests}...")
             result = tester._run_single_test(n + 1)
