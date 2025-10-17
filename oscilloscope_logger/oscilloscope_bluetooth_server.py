@@ -5,20 +5,19 @@ import subprocess
 import serial
 import time
 import os
-import socket
 
 scope_usb_address = 'USB0::10893::5990::MY58493325::INSTR'
 num_tests = 100
 timeout_sec = 2000  # ms
 
-"""Bluetooth server using RFCOMM socket (compatible with macOS client)"""
+"""Simple Bluetooth server using rfcomm bind (no pybluez required)"""
 
-def setup_bluetooth_rfcomm():
-    """Setup Bluetooth RFCOMM server socket"""
-    print("Setting up Bluetooth RFCOMM server...")
+def setup_bluetooth():
+    """Setup Bluetooth using system tools"""
+    print("Setting up Bluetooth...")
     
     try:
-        # Make Bluetooth discoverable
+        # Enable Bluetooth and make discoverable
         subprocess.run(['sudo', 'hciconfig', 'hci0', 'up'], check=False)
         subprocess.run(['sudo', 'hciconfig', 'hci0', 'piscan'], check=False)
         
@@ -30,38 +29,72 @@ def setup_bluetooth_rfcomm():
                 print(f"Pi Bluetooth Address: {addr}")
                 break
         
-        # Create RFCOMM socket (like TCP socket but for Bluetooth)
-        import bluetooth
+        # Set up RFCOMM listening on channel 1
+        print("Setting up RFCOMM server on channel 1...")
         
-        server_sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
-        server_sock.bind(("", bluetooth.PORT_ANY))
-        server_sock.listen(1)
+        # Kill any existing RFCOMM connections
+        subprocess.run(['sudo', 'pkill', '-f', 'rfcomm'], capture_output=True)
+        subprocess.run(['sudo', 'rfcomm', 'release', 'all'], capture_output=True)
         
-        port = server_sock.getsockname()[1]
-        print(f"✓ Bluetooth RFCOMM server listening on channel {port}")
+        # Bind RFCOMM channel 1 to listen for connections
+        bind_result = subprocess.run(['sudo', 'rfcomm', 'listen', '/dev/rfcomm0', '1'], 
+                                   capture_output=True, text=True, timeout=2)
         
-        # Advertise service
-        bluetooth.advertise_service(
-            server_sock, "Pi Oscilloscope Server",
-            service_id="00001101-0000-1000-8000-00805F9B34FB",  # Serial Port Profile UUID
-            service_classes=[bluetooth.SERIAL_PORT_CLASS],
-            profiles=[bluetooth.SERIAL_PORT_PROFILE]
-        )
+        print("✓ Bluetooth setup complete - listening on RFCOMM channel 1")
+        print("Pi is discoverable and ready for connection")
+        return True
         
-        return server_sock
-        
-    except ImportError:
-        print("❌ Python bluetooth library not installed")
-        print("Install with: sudo apt install python3-bluetooth")
-        return None
     except Exception as e:
-        print(f"❌ Bluetooth setup error: {e}")
-        return None
+        print(f"Bluetooth setup error: {e}")
+        return False
+
+def wait_for_bluetooth_connection():
+    """Wait for RFCOMM connection from Mac client"""
+    print("\n=== Waiting for Bluetooth RFCOMM Connection ===")
+    print("On your Mac:")
+    print("1. Pair with this Pi in System Preferences > Bluetooth (if not already paired)")
+    print("2. Run the Bluetooth client script")
+    print("3. Client will create RFCOMM connection on channel 1")
+    
+    # Start RFCOMM server in background
+    print("Starting RFCOMM server...")
+    
+    try:
+        # Use rfcomm to wait for incoming connection
+        proc = subprocess.Popen(['sudo', 'rfcomm', 'watch', '/dev/rfcomm0', '1'],
+                               stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        
+        # Wait for /dev/rfcomm0 to become available
+        for attempt in range(300):  # 5 minutes
+            if os.path.exists('/dev/rfcomm0'):
+                # Try to open the connection
+                try:
+                    time.sleep(1)  # Let connection stabilize
+                    ser = serial.Serial('/dev/rfcomm0', 115200, timeout=10)
+                    print(f"✓ RFCOMM client connected via /dev/rfcomm0")
+                    return ser, proc
+                except serial.SerialException as e:
+                    print(f"RFCOMM device exists but can't open: {e}")
+                    continue
+            
+            if attempt % 30 == 0:
+                remaining_min = (300 - attempt) // 60
+                print(f"Still waiting for RFCOMM connection... ({remaining_min} minutes remaining)")
+            
+            time.sleep(1)
+        
+        # Timeout
+        proc.terminate()
+        return None, None
+        
+    except Exception as e:
+        print(f"Error setting up RFCOMM server: {e}")
+        return None, None
 
 def main():
-    print("=== Bluetooth RFCOMM Server (Pi) ===")
+    print("=== Bluetooth Server (Pi) - Simple RFCOMM ===")
     
-    # Connect to oscilloscope first
+    # Connect to oscilloscope first (same as TCP)
     print("Connecting to oscilloscope...")
     try:
         rm = pyvisa.ResourceManager()
@@ -74,25 +107,24 @@ def main():
 
     tester = PacketLossTester(scope, "USB", num_tests)
 
-    # Setup Bluetooth RFCOMM server
-    server_sock = setup_bluetooth_rfcomm()
-    if not server_sock:
+    # Setup Bluetooth
+    if not setup_bluetooth():
+        print("❌ Bluetooth setup failed")
+        scope.close()
+        rm.close()
+        return
+
+    # Wait for client connection
+    ser, proc = wait_for_bluetooth_connection()
+    
+    if not ser:
+        print("❌ No Bluetooth client connected")
         scope.close()
         rm.close()
         return
 
     try:
-        print("\nWaiting for Bluetooth client connection...")
-        print("On your Mac, run the client and it should find this service")
-        
-        # Wait for client connection (like TCP accept())
-        client_sock, client_info = server_sock.accept()
-        print(f"✓ Client connected from {client_info}")
-        
-        # Convert socket to file-like object for easier data handling
-        client_file = client_sock.makefile('wb')
-        
-        print("Starting tests...")
+        print("✓ Client connected! Starting tests...")
         
         # Send tests exactly like TCP server
         for n in range(num_tests):
@@ -101,9 +133,9 @@ def main():
             
             # Send data using same protocol as TCP
             data = pickle.dumps(result)
-            client_file.write(len(data).to_bytes(4, 'big'))  # Length first
-            client_file.write(data)                          # Then data
-            client_file.flush()                              # Ensure sent
+            ser.write(len(data).to_bytes(4, 'big'))  # Length first
+            ser.write(data)                          # Then data
+            ser.flush()                              # Ensure sent
             
         print("✓ All tests completed and sent")
         
@@ -111,14 +143,12 @@ def main():
         print(f"❌ Error during tests: {e}")
     finally:
         print("Closing connections...")
-        try:
-            client_sock.close()
-        except:
-            pass
-        try:
-            server_sock.close()
-        except:
-            pass
+        if ser:
+            ser.close()
+        if proc:
+            proc.terminate()
+        # Clean up RFCOMM
+        subprocess.run(['sudo', 'rfcomm', 'release', '/dev/rfcomm0'], capture_output=True)
         scope.close()
         rm.close()
 
