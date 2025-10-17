@@ -12,59 +12,121 @@ timeout_sec = 2000  # ms
 
 """Bluetooth server to be run on the Pi connected to the oscilloscope."""
 
-def setup_bluetooth_rfcomm():
-    """Set up Bluetooth RFCOMM server using system tools"""
+def setup_bluetooth_simple():
+    """Simplified Bluetooth setup using bluetoothctl"""
+    print("Setting up Bluetooth using bluetoothctl...")
+    
     try:
-        # Make Bluetooth discoverable
-        subprocess.run(['sudo', 'hciconfig', 'hci0', 'piscan'], check=True)
-        print("Bluetooth made discoverable")
+        # Use bluetoothctl commands
+        commands = [
+            "power on",
+            "discoverable on", 
+            "pairable on",
+            "agent NoInputNoOutput",
+            "default-agent"
+        ]
         
-        # Kill any existing rfcomm processes
-        subprocess.run(['sudo', 'pkill', '-f', 'rfcomm'], capture_output=True)
+        for cmd in commands:
+            result = subprocess.run(['bluetoothctl'], input=f"{cmd}\nquit\n", 
+                                  text=True, capture_output=True, timeout=5)
+            print(f"Command '{cmd}': {result.stdout.strip()}")
+            
+        print("✓ Bluetooth configured successfully")
+        print("Pi is now discoverable and pairable")
         
-        print("Waiting for Bluetooth RFCOMM connection on channel 1...")
-        print("Connect from your Mac to complete the connection")
+        # Get Pi's Bluetooth address
+        result = subprocess.run(['bluetoothctl', 'show'], capture_output=True, text=True)
+        for line in result.stdout.split('\n'):
+            if 'Controller' in line:
+                bt_addr = line.split()[1]
+                print(f"Pi Bluetooth address: {bt_addr}")
+                break
+                
+    except Exception as e:
+        print(f"Bluetooth setup error: {e}")
         
-        # Wait for RFCOMM connection to be established
-        for i in range(60):  # Wait up to 60 seconds
-            if os.path.exists('/dev/rfcomm0'):
+def wait_for_serial_connection():
+    """Wait for any serial connection that might be created by pairing"""
+    print("\nWaiting for Bluetooth serial connection...")
+    print("Please pair and connect from your Mac now:")
+    print("1. Go to System Preferences > Bluetooth")
+    print("2. Find and pair with this Pi")
+    print("3. After pairing, try to connect")
+    
+    # Check multiple possible serial devices
+    possible_devices = [
+        '/dev/rfcomm0',
+        '/dev/ttyS0', 
+        '/dev/ttyAMA0',
+        '/dev/serial0'
+    ]
+    
+    for attempt in range(120):  # Wait up to 2 minutes
+        # Check for RFCOMM devices
+        for device in possible_devices:
+            if os.path.exists(device):
                 try:
-                    ser = serial.Serial('/dev/rfcomm0', 115200, timeout=10)
-                    print("Bluetooth RFCOMM connection established")
+                    ser = serial.Serial(device, 115200, timeout=10)
+                    print(f"✓ Connected via {device}")
                     return ser
                 except serial.SerialException:
-                    pass
-            time.sleep(1)
-            if i % 10 == 0:
-                print(f"Still waiting for connection... ({60-i}s remaining)")
-                
-        return None
+                    continue
         
-    except subprocess.CalledProcessError as e:
-        print(f"Error setting up Bluetooth: {e}")
-        return None
+        # Also check for any new tty devices
+        try:
+            devices = os.listdir('/dev/')
+            bt_devices = [d for d in devices if 'rfcomm' in d or 'bluetooth' in d.lower()]
+            for device in bt_devices:
+                device_path = f'/dev/{device}'
+                try:
+                    ser = serial.Serial(device_path, 115200, timeout=10)
+                    print(f"✓ Connected via {device_path}")
+                    return ser
+                except serial.SerialException:
+                    continue
+        except:
+            pass
+            
+        if attempt % 10 == 0:
+            print(f"Still waiting... ({120-attempt}s remaining)")
+        time.sleep(1)
+    
+    return None
 
 def main():
-    rm = pyvisa.ResourceManager()
-    scope = rm.open_resource(scope_usb_address)
-    scope.timeout = timeout_sec
+    print("=== Bluetooth Server (Pi) ===")
+    
+    # Setup Bluetooth
+    setup_bluetooth_simple()
+    
+    # Connect to oscilloscope
+    try:
+        rm = pyvisa.ResourceManager()
+        scope = rm.open_resource(scope_usb_address)
+        scope.timeout = timeout_sec
+        print("✓ Oscilloscope connected")
+    except Exception as e:
+        print(f"❌ Failed to connect to oscilloscope: {e}")
+        print("Make sure oscilloscope is connected and powered on")
+        return
 
     tester = PacketLossTester(scope, "USB", num_tests)
 
-    # Set up Bluetooth connection (mirrors TCP socket setup)
-    ser = setup_bluetooth_rfcomm()
+    # Wait for Bluetooth connection
+    ser = wait_for_serial_connection()
     
     if not ser:
-        print("Failed to establish Bluetooth connection")
+        print("❌ No Bluetooth connection established")
         scope.close()
         rm.close()
         return
 
     try:
-        print("Bluetooth client connected, starting tests...")
+        print("✓ Bluetooth client connected, starting tests...")
         
         # Send tests exactly like TCP server
         for n in range(num_tests):
+            print(f"Running test {n+1}/{num_tests}...")
             result = tester._run_single_test(n + 1)
             # Send result as pickled object (same as TCP)
             data = pickle.dumps(result)
@@ -73,16 +135,15 @@ def main():
             ser.write(data)
             ser.flush()
             
-        print("All tests sent. Closing connection.")
+        print("✓ All tests sent. Closing connection.")
         
     except Exception as e:
-        print(f"Error during communication: {e}")
+        print(f"❌ Error during communication: {e}")
     finally:
-        ser.close()
+        if ser:
+            ser.close()
         scope.close()
         rm.close()
-        # Clean up RFCOMM
-        subprocess.run(['sudo', 'rfcomm', 'release', '/dev/rfcomm0'], capture_output=True)
 
 if __name__ == "__main__":
     main()

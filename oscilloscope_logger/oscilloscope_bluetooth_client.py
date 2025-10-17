@@ -2,14 +2,12 @@ import serial
 import pickle
 import csv
 import test_config
-import subprocess
+import serial.tools.list_ports
+import time
 
 num_tests = 100
 base_name = "usb_bt_test_results"
 full_path = test_config.get_next_test_filepath(base_name)
-
-# Hardcoded Pi Bluetooth address - find this by running "bluetoothctl show" on the Pi
-PI_BT_ADDR = "2C:CF:67:6F:5D:40"  # Replace with your Pi's actual Bluetooth MAC address
 
 CSV_HEADER = [
     "Attempt", "Timestamp", "Status", "Response Time (ms)", "Response",
@@ -17,53 +15,123 @@ CSV_HEADER = [
     "Waveform Min", "Waveform Max", "Waveform Avg"
 ]
 
-def setup_bluetooth_connection():
-    """Set up Bluetooth connection to Pi"""
-    try:
-        print(f"Connecting to Pi at {PI_BT_ADDR} via Bluetooth...")
+def find_bluetooth_port():
+    """Find Bluetooth serial port by listing all ports"""
+    print("=== Available Serial Ports ===")
+    ports = serial.tools.list_ports.comports()
+    
+    if not ports:
+        print("No serial ports found")
+        return None
+    
+    bluetooth_ports = []
+    all_ports = []
+    
+    for i, port in enumerate(ports):
+        all_ports.append(port)
+        description = port.description.lower()
+        device = port.device.lower()
         
-        # Try to bind RFCOMM (requires pairing first)
-        cmd = ['sudo', 'rfcomm', 'connect', '/dev/rfcomm0', PI_BT_ADDR, '1']
-        print("Establishing RFCOMM connection...")
+        print(f"{i+1}. {port.device}")
+        print(f"   Description: {port.description}")
+        print(f"   Hardware ID: {getattr(port, 'hwid', 'Unknown')}")
         
-        # This will block until connection is established
-        proc = subprocess.Popen(cmd)
-        
-        # Wait a moment for connection to establish
-        import time
-        time.sleep(3)
-        
-        if proc.poll() is None:  # Process is still running (good)
-            try:
-                ser = serial.Serial('/dev/rfcomm0', 115200, timeout=30)
-                print("Bluetooth serial connection established")
-                return ser, proc
-            except serial.SerialException as e:
-                print(f"Failed to open serial port: {e}")
-                proc.terminate()
-                return None, None
+        # Look for Bluetooth indicators
+        if any(keyword in description for keyword in 
+               ['bluetooth', 'bt', 'serial', 'spp', 'rfcomm']):
+            bluetooth_ports.append((i+1, port))
+            print("   ^ Potential Bluetooth port")
+        print()
+    
+    if bluetooth_ports:
+        print("Potential Bluetooth ports found:")
+        for num, port in bluetooth_ports:
+            print(f"  {num}. {port.device} - {port.description}")
+        print()
+    
+    # Let user choose
+    while True:
+        if bluetooth_ports:
+            print("Enter the number of the Bluetooth port to use")
+            print("(or 'a' to see all ports, or 'q' to quit):")
         else:
-            print("RFCOMM connection failed")
-            return None, None
+            print("No obvious Bluetooth ports found.")
+            print("Enter port number to try anyway, 'a' to see all, or 'q' to quit:")
+        
+        choice = input("> ").strip().lower()
+        
+        if choice == 'q':
+            return None
+        elif choice == 'a':
+            print("\nAll ports:")
+            for i, port in enumerate(all_ports):
+                print(f"{i+1}. {port.device} - {port.description}")
+            continue
+        
+        try:
+            port_num = int(choice) - 1
+            if 0 <= port_num < len(all_ports):
+                return all_ports[port_num].device
+            else:
+                print("Invalid port number")
+        except ValueError:
+            print("Please enter a valid number")
+
+def test_connection(port_path):
+    """Test if we can connect to the specified port"""
+    try:
+        print(f"Testing connection to {port_path}...")
+        ser = serial.Serial(port_path, 115200, timeout=5)
+        print("✓ Port opened successfully")
+        
+        # Try to read a small amount of data to see if Pi is sending
+        print("Checking if Pi is sending data...")
+        ser.timeout = 3
+        test_data = ser.read(4)  # Try to read length header
+        
+        if len(test_data) == 4:
+            length = int.from_bytes(test_data, 'big')
+            print(f"✓ Received data header, expecting {length} bytes")
+            ser.close()
+            return True
+        elif test_data:
+            print(f"✓ Received some data: {test_data}")
+            ser.close()
+            return True
+        else:
+            print("⚠ No data received, but port is accessible")
+            ser.close()
+            return True
             
-    except Exception as e:
-        print(f"Error setting up Bluetooth: {e}")
-        return None, None
+    except serial.SerialException as e:
+        print(f"✗ Cannot connect to {port_path}: {e}")
+        return False
 
 def main():
-    # Set up Bluetooth connection (mirrors TCP connect)
-    ser, rfcomm_proc = setup_bluetooth_connection()
+    print("=== Bluetooth Client (Mac) ===")
+    print("Make sure:")
+    print("1. Pi server is running")
+    print("2. Devices are paired in System Preferences > Bluetooth")
+    print("3. You've tried connecting to the Pi in Bluetooth settings")
+    print()
     
-    if not ser:
-        print("Failed to establish Bluetooth connection")
-        print("Make sure:")
-        print("1. Devices are paired in System Preferences > Bluetooth") 
-        print("2. Pi server is running")
-        print("3. Bluetooth is enabled on both devices")
+    # Find available ports
+    port_path = find_bluetooth_port()
+    if not port_path:
+        print("No port selected. Exiting.")
         return
-
+    
+    # Test the connection first
+    if not test_connection(port_path):
+        retry = input("Connection test failed. Try anyway? (y/n): ")
+        if retry.lower() != 'y':
+            return
+    
     try:
-        print("Connected, receiving data...")
+        print(f"\n✓ Connecting to {port_path} for data transfer...")
+        ser = serial.Serial(port_path, 115200, timeout=30)
+        
+        print(f"✓ Connected! Receiving {num_tests} tests...")
         
         # Receive data exactly like TCP client
         with open(full_path, 'w', newline='') as f:
@@ -71,36 +139,47 @@ def main():
             writer.writerow(["USB Test with Measurement Logging (Bluetooth)"])
             writer.writerow(CSV_HEADER)
             
-            for _ in range(num_tests):
+            for i in range(num_tests):
+                print(f"Test {i+1}/{num_tests}...", end=' ')
+                
                 # Read length first (4 bytes) - same as TCP
                 length_bytes = ser.read(4)
                 if len(length_bytes) != 4:
+                    print(f"Failed to read length (got {len(length_bytes)} bytes)")
                     break
                 length = int.from_bytes(length_bytes, 'big')
                 
                 # Read the actual data - same as TCP
                 data = b''
                 while len(data) < length:
-                    packet = ser.read(length - len(data))
+                    remaining = length - len(data)
+                    packet = ser.read(remaining)
                     if not packet:
+                        print(f"Connection lost (expected {remaining} more bytes)")
                         break
                     data += packet
                 
-                result = pickle.loads(data)
-                writer.writerow(result)
-                print(f"Logged: {result}")
+                if len(data) == length:
+                    result = pickle.loads(data)
+                    writer.writerow(result)
+                    print(f"✓ {result[2]}")
+                else:
+                    print(f"Incomplete data ({len(data)}/{length} bytes)")
+                    break
                 
+        print(f"\n✓ All tests completed!")
         print(f"Results saved to {full_path}")
         
+    except serial.SerialException as e:
+        print(f"\n❌ Serial connection error: {e}")
     except Exception as e:
-        print(f"Error: {e}")
+        print(f"\n❌ Error during data transfer: {e}")
     finally:
-        if ser:
+        try:
             ser.close()
-        if rfcomm_proc:
-            rfcomm_proc.terminate()
-        # Clean up
-        subprocess.run(['sudo', 'rfcomm', 'release', '/dev/rfcomm0'], capture_output=True)
+            print("Connection closed")
+        except:
+            pass
 
 if __name__ == "__main__":
     main()
