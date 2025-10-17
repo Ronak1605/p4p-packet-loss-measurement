@@ -1,0 +1,2 @@
+USB Test with Measurement Logging (Bluetooth)
+Attempt,Timestamp,Status,Response Time (ms),Response,V RMS CH1 (V),AC RMS CH2 (A),AC RMS CH3 (A),Waveform Min,Waveform Max,Waveform Avg

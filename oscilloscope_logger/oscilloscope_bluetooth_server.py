@@ -5,133 +5,63 @@ import subprocess
 import serial
 import time
 import os
+import socket
 
 scope_usb_address = 'USB0::10893::5990::MY58493325::INSTR'
 num_tests = 100
 timeout_sec = 2000  # ms
 
-"""Bluetooth server to be run on the Pi connected to the oscilloscope."""
+"""Bluetooth server using RFCOMM socket (compatible with macOS client)"""
 
-def setup_bluetooth_simple():
-    """Simplified Bluetooth setup using bluetoothctl"""
-    print("Setting up Bluetooth using bluetoothctl...")
+def setup_bluetooth_rfcomm():
+    """Setup Bluetooth RFCOMM server socket"""
+    print("Setting up Bluetooth RFCOMM server...")
     
     try:
-        # Use bluetoothctl commands
-        commands = [
-            "power on",
-            "discoverable on", 
-            "pairable on",
-            "agent NoInputNoOutput",
-            "default-agent"
-        ]
+        # Make Bluetooth discoverable
+        subprocess.run(['sudo', 'hciconfig', 'hci0', 'up'], check=False)
+        subprocess.run(['sudo', 'hciconfig', 'hci0', 'piscan'], check=False)
         
-        for cmd in commands:
-            result = subprocess.run(['bluetoothctl'], input=f"{cmd}\nquit\n", 
-                                  text=True, capture_output=True, timeout=5)
-            print(f"Command '{cmd}': {result.stdout.strip()}")
-            
-        print("✓ Bluetooth configured successfully")
-        print("Pi is now discoverable and pairable")
-        
-        # Get Pi's Bluetooth address
-        result = subprocess.run(['bluetoothctl', 'show'], capture_output=True, text=True)
+        # Get Bluetooth address
+        result = subprocess.run(['hciconfig'], capture_output=True, text=True)
         for line in result.stdout.split('\n'):
-            if 'Controller' in line:
-                bt_addr = line.split()[1]
-                print(f"Pi Bluetooth address: {bt_addr}")
+            if 'BD Address:' in line:
+                addr = line.split('BD Address: ')[1].split()[0]
+                print(f"Pi Bluetooth Address: {addr}")
                 break
-                
+        
+        # Create RFCOMM socket (like TCP socket but for Bluetooth)
+        import bluetooth
+        
+        server_sock = bluetooth.BluetoothSocket(bluetooth.RFCOMM)
+        server_sock.bind(("", bluetooth.PORT_ANY))
+        server_sock.listen(1)
+        
+        port = server_sock.getsockname()[1]
+        print(f"✓ Bluetooth RFCOMM server listening on channel {port}")
+        
+        # Advertise service
+        bluetooth.advertise_service(
+            server_sock, "Pi Oscilloscope Server",
+            service_id="00001101-0000-1000-8000-00805F9B34FB",  # Serial Port Profile UUID
+            service_classes=[bluetooth.SERIAL_PORT_CLASS],
+            profiles=[bluetooth.SERIAL_PORT_PROFILE]
+        )
+        
+        return server_sock
+        
+    except ImportError:
+        print("❌ Python bluetooth library not installed")
+        print("Install with: sudo apt install python3-bluetooth")
+        return None
     except Exception as e:
-        print(f"Bluetooth setup error: {e}")
-
-def wait_for_bluetooth_connection():
-    """Wait for ACTUAL Bluetooth client connection (not built-in serial ports)"""
-    print("\nWaiting for Bluetooth client connection...")
-    print("Please connect from your Mac:")
-    print("1. Pair with this Pi in System Preferences > Bluetooth")
-    print("2. Run the client script on your Mac")
-    print("3. Select the Bluetooth port when prompted")
-    
-    # Only check for RFCOMM devices (actual Bluetooth connections)
-    # Exclude built-in serial ports that always exist
-    bluetooth_only_devices = [
-        '/dev/rfcomm0',
-        '/dev/rfcomm1', 
-        '/dev/rfcomm2',
-        '/dev/rfcomm3',
-        '/dev/rfcomm4'
-    ]
-    
-    print("Monitoring for RFCOMM Bluetooth connections only...")
-    print("(Ignoring built-in serial ports like /dev/serial0, /dev/ttyS0, etc.)")
-    
-    # Track which devices existed before we started waiting
-    initial_devices = set()
-    try:
-        initial_devices = set(os.listdir('/dev/'))
-    except:
-        pass
-    
-    for attempt in range(600):  # Wait up to 10 minutes
-        
-        # Only check RFCOMM devices (real Bluetooth connections)
-        for device in bluetooth_only_devices:
-            if os.path.exists(device):
-                try:
-                    print(f"Found RFCOMM device: {device}")
-                    # Try to open it - if it fails, no client is connected
-                    ser = serial.Serial(device, 115200, timeout=2)
-                    
-                    # Test if there's actually a client by trying to read
-                    # If no client, this will timeout quickly
-                    print(f"Testing if {device} has an active client...")
-                    test_read = ser.read(1)  # Try to read 1 byte with 2-second timeout
-                    
-                    if test_read or True:  # Accept connection even if no immediate data
-                        print(f"✓ Bluetooth client connected via {device}")
-                        return ser
-                    else:
-                        print(f"No active client on {device}")
-                        ser.close()
-                        
-                except serial.SerialException as e:
-                    print(f"Cannot open {device}: {e}")
-                    continue
-        
-        # Check for any NEW devices that appeared (might be Bluetooth-related)
-        try:
-            current_devices = set(os.listdir('/dev/'))
-            new_devices = current_devices - initial_devices
-            
-            for device_name in new_devices:
-                if 'bluetooth' in device_name.lower() or 'bt' in device_name.lower():
-                    device_path = f'/dev/{device_name}'
-                    try:
-                        ser = serial.Serial(device_path, 115200, timeout=2)
-                        print(f"✓ New Bluetooth device connected: {device_path}")
-                        return ser
-                    except serial.SerialException:
-                        continue
-        except:
-            pass
-            
-        if attempt % 30 == 0:  # Print every 30 seconds
-            minutes_remaining = (600 - attempt) // 60
-            print(f"Still waiting for RFCOMM connection... ({minutes_remaining} minutes remaining)")
-            print("Make sure to:")
-            print("  - Pair devices in System Preferences > Bluetooth")
-            print("  - Run the client script which will create the RFCOMM connection")
-            
-        time.sleep(1)
-    
-    print("❌ Timeout waiting for Bluetooth client connection")
-    return None
+        print(f"❌ Bluetooth setup error: {e}")
+        return None
 
 def main():
-    print("=== Bluetooth Server (Pi) ===")
+    print("=== Bluetooth RFCOMM Server (Pi) ===")
     
-    # Connect to oscilloscope FIRST (same as TCP server)
+    # Connect to oscilloscope first
     print("Connecting to oscilloscope...")
     try:
         rm = pyvisa.ResourceManager()
@@ -140,43 +70,55 @@ def main():
         print("✓ Oscilloscope connected")
     except Exception as e:
         print(f"❌ Failed to connect to oscilloscope: {e}")
-        print("Make sure oscilloscope is connected and powered on")
         return
 
     tester = PacketLossTester(scope, "USB", num_tests)
 
-    # Setup Bluetooth
-    setup_bluetooth_simple()
-    
-    # WAIT for ACTUAL client connection (not built-in serial ports)
-    ser = wait_for_bluetooth_connection()
-    
-    if not ser:
-        print("❌ No Bluetooth client connection established")
+    # Setup Bluetooth RFCOMM server
+    server_sock = setup_bluetooth_rfcomm()
+    if not server_sock:
         scope.close()
         rm.close()
         return
 
     try:
-        print("✓ Real Bluetooth client connected, starting tests...")
+        print("\nWaiting for Bluetooth client connection...")
+        print("On your Mac, run the client and it should find this service")
         
-        # NOW run tests (same as TCP server - ONLY after client connects)
+        # Wait for client connection (like TCP accept())
+        client_sock, client_info = server_sock.accept()
+        print(f"✓ Client connected from {client_info}")
+        
+        # Convert socket to file-like object for easier data handling
+        client_file = client_sock.makefile('wb')
+        
+        print("Starting tests...")
+        
+        # Send tests exactly like TCP server
         for n in range(num_tests):
+            print(f"Running test {n+1}/{num_tests}...")
             result = tester._run_single_test(n + 1)
-            # Send result as pickled object (same as TCP)
-            data = pickle.dumps(result)
-            # Send length first (4 bytes, same as TCP)
-            ser.write(len(data).to_bytes(4, 'big'))
-            ser.write(data)
-            ser.flush()
             
-        print("All tests sent. Closing connection.")
+            # Send data using same protocol as TCP
+            data = pickle.dumps(result)
+            client_file.write(len(data).to_bytes(4, 'big'))  # Length first
+            client_file.write(data)                          # Then data
+            client_file.flush()                              # Ensure sent
+            
+        print("✓ All tests completed and sent")
         
     except Exception as e:
-        print(f"❌ Error during communication: {e}")
+        print(f"❌ Error during tests: {e}")
     finally:
-        if ser:
-            ser.close()
+        print("Closing connections...")
+        try:
+            client_sock.close()
+        except:
+            pass
+        try:
+            server_sock.close()
+        except:
+            pass
         scope.close()
         rm.close()
 
