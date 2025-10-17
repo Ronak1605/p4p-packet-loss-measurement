@@ -1,8 +1,8 @@
 import os
 
 # === Configurable Test Info (CHANGE FOR EACH TEST) ===
-cable_type = 'stp_shielded_green'
-position = 'inverter_lcl_gap'
+cable_type = 'wireless_bluetooth'
+position = 'NA'
 power_state = '60V'
 conduction_angle = '120_deg'
 
