@@ -179,4 +179,3 @@ cython_debug/
 # Log files
 scope_log.txt
 packet_loss_log.txt
-results

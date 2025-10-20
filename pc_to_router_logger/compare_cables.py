@@ -512,6 +512,43 @@ def compare_all_cable_types(wifi_files, utp_files, stp_files, weakened_utp_files
     # Save summary
     df.to_csv(os.path.join(output_dir, "all_cable_types_summary.csv"), index=False)
     print(f"Plots and summary saved to {output_dir}")
+    
+def read_latency_from_csv(csv_file):
+    """Read latency data from CSV file, similar to oscilloscope logger."""
+    result = read_csv_data(csv_file)
+    if result[0] is None:
+        return None
+    
+    df, _ = result
+    
+    # Use 'Response Time (ms)' as latency
+    if 'Response Time (ms)' in df.columns:
+        return df['Response Time (ms)'].values
+    return None
+
+def compare_latency_across_cable_types(files_dict, output_dir="cable_latency_comparison"):
+    """Create a latency comparison plot similar to oscilloscope logger."""
+    os.makedirs(output_dir, exist_ok=True)
+    
+    plt.figure(figsize=(14, 8))
+    
+    for label, (file, color) in files_dict.items():
+        latency = read_latency_from_csv(file)
+        if latency is not None:
+            plt.plot(range(1, len(latency)+1), latency, label=label, color=color, 
+                    marker='o', markersize=7, linewidth=2, alpha=0.85)
+    
+    plt.xlabel("Packet Attempt", fontsize=29)
+    plt.ylabel("Latency (ms)", fontsize=29)
+    plt.title("Packet Response Times for Tests with Router Communication", fontsize=29)
+    plt.legend(fontsize=29)
+    plt.grid(True, alpha=0.3)
+    plt.xticks(fontsize=29)
+    plt.yticks(fontsize=29)
+    plt.tight_layout()
+    plt.savefig(os.path.join(output_dir, "latency_comparison.png"), dpi=300)
+    plt.close()
+    print(f"Latency comparison plot saved to {output_dir}/latency_comparison.png")
 
 
 if __name__ == "__main__":
@@ -526,3 +563,18 @@ if __name__ == "__main__":
     weakened_utp_files = get_csv_files(os.path.join(base_path, "results2", "tcp2", "lan_cat6_utp", "metal_benchtop_taped", "60V", "120_deg"))
 
     compare_all_cable_types(wifi_files, utp_files, stp_files, weakened_utp_files)
+    
+    # New latency comparison similar to oscilloscope logger
+    # Use the first file from each cable type for the latency comparison
+    latency_files = {
+        "WiFi": (wifi_files[0] if wifi_files else None, "purple"),
+        "UTP": (utp_files[0] if utp_files else None, "red"),
+        "STP": (stp_files[0] if stp_files else None, "blue"),
+        "Weakened UTP": (weakened_utp_files[0] if weakened_utp_files else None, "orange"),
+    }
+    
+    # Filter out None files
+    valid_latency_files = {k: v for k, v in latency_files.items() if v[0] is not None}
+    
+    if valid_latency_files:
+        compare_latency_across_cable_types(valid_latency_files)
