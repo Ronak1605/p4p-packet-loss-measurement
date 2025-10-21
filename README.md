@@ -109,6 +109,9 @@ You can run oscilloscope tests by connecting the oscilloscope to a Raspberry Pi 
 - If you have connection issues, check your firewall and network settings.
 - For SSH access, use your Pi’s username (e.g., `ssh p4p-140@192.168.0.50`).
 - Sometimes in the GUI the Pi will start at the command line, in such a scenario enter the command 'startx' and it should be normal
+- Somtimes the Pi will not detect the device in that case: repower the scope while it is insstalled in the PI
+
+
 
 
 ---
