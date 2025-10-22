@@ -3,7 +3,7 @@ import socket
 import pickle
 from packet_loss_tester import PacketLossTester
 
-scope_usb_address = 'USB0::10893::5990::MY58493325::INSTR'
+scope_usb_address = 'USB0::2391::6040::MY59123923::INSTR'
 num_tests = 100
 timeout_sec = 2000  # ms
 
