@@ -3,7 +3,7 @@ import test_config
 from packet_loss_tester import PacketLossTester
 
 # USB VISA address
-scope_usb_address = 'USB0::2391::6040::MY591123923::INSTR'
+scope_usb_address = 'USB0::2391::6040::MY59123923::INSTR'
 
 # Test parameters
 num_tests = 50
